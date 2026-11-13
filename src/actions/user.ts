@@ -1,35 +1,21 @@
 'use server';
 
-import { createClient } from '@/lib/supabase/server';
-import { Database } from '@/lib/types/database.types';
-import { SupabaseClient } from '@supabase/supabase-js';
+import { cookies } from 'next/headers';
+import { verifyJWT } from '@/lib/auth';
+import { createServiceClient } from '@/lib/supabase/service';
 
-export async function getUserSubdomain() {
-    const supabase = (await createClient()) as SupabaseClient<Database>;
-    const { data: { user } } = await supabase.auth.getUser();
+/** Returns the signed-in user's portfolio subdomain, or null if no portfolio exists yet. */
+export async function getUserSubdomain(): Promise<string | null> {
+    const token = (await cookies()).get('auth-token')?.value;
+    const payload = token ? await verifyJWT(token) : null;
+    if (!payload?.sub) return null;
 
-    if (!user) return null;
-
-    // First try to fetch from portfolios table
+    const supabase = createServiceClient() as any;
     const { data } = await supabase
         .from('portfolios')
         .select('subdomain')
-        .eq('user_id', user.id)
-        .single();
+        .eq('user_id', payload.sub)
+        .maybeSingle();
 
-    if (data) {
-        // console.log("Found portfolio via user_id:", data); 
-    } else {
-        console.log("No portfolio found for user_id:", user.id);
-    }
-
-    const portfolio = data as { subdomain: string | null } | null;
-
-    if (portfolio?.subdomain) {
-        return portfolio.subdomain;
-    }
-
-    // Fallback: simple logic if portfolio doesn't exist yet but user is logged in
-    // This matches the save logic: user.email?.split('@')[0] || user.id
-    return user.email?.split('@')[0] || user.id;
+    return (data?.subdomain as string | undefined) || null;
 }

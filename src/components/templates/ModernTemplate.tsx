@@ -52,12 +52,14 @@ export const ModernTemplate = ({ data, theme, font }: TemplateProps) => {
                         <p className="text-lg text-slate-600 leading-relaxed">
                             {data.bio}
                         </p>
-                        <div className="flex flex-wrap items-center gap-4 text-slate-500 pt-2">
-                            <span className="flex items-center gap-1.5">
-                                <MapPin className="h-4 w-4" />
-                                {data.location}
-                            </span>
-                        </div>
+                        {data.location && (
+                            <div className="flex flex-wrap items-center gap-4 text-slate-500 pt-2">
+                                <span className="flex items-center gap-1.5">
+                                    <MapPin className="h-4 w-4" />
+                                    {data.location}
+                                </span>
+                            </div>
+                        )}
                         <div className="flex gap-3 pt-4">
                             <Button className="rounded-full" leftIcon={<Mail className="h-4 w-4" />}>
                                 Contact

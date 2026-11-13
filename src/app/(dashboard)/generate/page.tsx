@@ -1,13 +1,11 @@
 'use client';
 
-import { useState, useEffect } from 'react';
+import { useState } from 'react';
 import Link from 'next/link';
-import { supabase } from '@/lib/supabase/client';
 import { Sparkles, Loader2, CheckCircle2, AlertCircle, ArrowRight, Wand2, Search, FileText, Globe, Eye } from 'lucide-react';
-import { Card, CardContent, CardDescription, CardHeader, CardTitle, CardFooter } from '@/components/ui/card';
+import { Card } from '@/components/ui/card';
 import { Button } from '@/components/ui/button';
-import { Badge } from '@/components/ui/badge';
-// import { Progress } from '@/components/ui/progress'; // If available, otherwise use custom
+import { generateMyPortfolio } from '@/actions/generate';
 
 export default function GeneratePage() {
     const [generating, setGenerating] = useState(false);
@@ -22,24 +20,38 @@ export default function GeneratePage() {
         { name: 'Finalizing Design', icon: Wand2, detail: 'Applying theme and layout...' }
     ];
 
+    const [summary, setSummary] = useState<string | null>(null);
+
     const startGeneration = async () => {
         setGenerating(true);
         setComplete(false);
         setCurrentStage(0);
         setError(null);
+        setSummary(null);
+
+        // Advance the visual stages while the real work runs; hold on the last one until it finishes
+        const timer = setInterval(() => {
+            setCurrentStage(s => Math.min(s + 1, stages.length - 1));
+        }, 6000);
 
         try {
-            // Simulate generation process
-            for (let i = 0; i < stages.length; i++) {
-                setCurrentStage(i);
-                await new Promise(resolve => setTimeout(resolve, 2000)); // 2 seconds per stage
+            const result = await generateMyPortfolio();
+            if (!result.success) {
+                setError(result.error);
+                return;
             }
-
+            const { stats, warnings } = result;
+            setSummary(
+                `Built from ${stats.projects} projects, ${stats.experiences} experiences and ${stats.skills} skills` +
+                (stats.descriptionsWritten ? `; wrote ${stats.descriptionsWritten} project descriptions` : '') +
+                '.' + (warnings.length ? ` Note: ${warnings[0]}` : '')
+            );
             setComplete(true);
-            setGenerating(false);
         } catch (err) {
             console.error('Generation error:', err);
-            setError('An error occurred during generation. Please try again.');
+            setError(err instanceof Error ? err.message : 'An error occurred during generation. Please try again.');
+        } finally {
+            clearInterval(timer);
             setGenerating(false);
         }
     };
@@ -92,6 +104,17 @@ export default function GeneratePage() {
                             <p className="text-xs text-slate-400 mt-4">
                                 * Takes approximately 30-60 seconds
                             </p>
+                            {error && (
+                                <div className="mt-6 flex items-start gap-2 rounded-lg border border-red-200 bg-red-50 p-3 text-left text-sm text-red-700">
+                                    <AlertCircle className="h-4 w-4 mt-0.5 shrink-0" />
+                                    <span>
+                                        {error}{' '}
+                                        {/no data/i.test(error) && (
+                                            <Link href="/connect" className="font-medium underline">Go to Connect</Link>
+                                        )}
+                                    </span>
+                                </div>
+                            )}
                         </div>
                     </div>
                 )}
@@ -165,6 +188,7 @@ export default function GeneratePage() {
                         <p className="text-slate-500 mb-8 max-w-md mx-auto">
                             Your professional portfolio has been successfully created. You can now preview it live or customize the design.
                         </p>
+                        {summary && <p className="text-sm text-slate-400 -mt-4 mb-8 max-w-md mx-auto">{summary}</p>}
 
                         <div className="flex flex-col sm:flex-row items-center justify-center gap-4">
                             <Link href="/preview">
