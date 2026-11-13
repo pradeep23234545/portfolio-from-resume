@@ -10,10 +10,19 @@ export interface ContactLink {
 
 const withProtocol = (url: string) => (/^https?:\/\//i.test(url) ? url : `https://${url}`);
 
+/**
+ * Email links open Gmail's compose window in a new tab instead of `mailto:`,
+ * which would launch the visitor's default mail app (often Outlook).
+ */
+export function gmailComposeUrl(emailOrMailto: string) {
+    const to = emailOrMailto.replace(/^mailto:/i, '').split('?')[0];
+    return `https://mail.google.com/mail/?view=cm&fs=1&to=${encodeURIComponent(to)}`;
+}
+
 /** Contact/social links that actually have a value, in display order. */
 export function contactLinks(data: PortfolioData): ContactLink[] {
     const links: (ContactLink | null)[] = [
-        data.socials.email ? { key: 'email', label: 'Email', href: data.socials.email, icon: Mail } : null,
+        data.socials.email ? { key: 'email', label: 'Email', href: gmailComposeUrl(data.socials.email), icon: Mail } : null,
         data.socials.github ? { key: 'github', label: 'GitHub', href: data.socials.github, icon: Github } : null,
         data.socials.linkedin ? { key: 'linkedin', label: 'LinkedIn', href: withProtocol(data.socials.linkedin), icon: Linkedin } : null,
         data.website ? { key: 'website', label: 'Website', href: withProtocol(data.website), icon: Globe } : null,
