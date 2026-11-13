@@ -97,7 +97,9 @@ When creating the GitHub OAuth app, set the callback URL to
 
 ### 3. Set up the database
 
-In the Supabase **SQL Editor**, run the files in [`supabase/migrations`](supabase/migrations) in order:
+For a new project, paste [`supabase/setup.sql`](supabase/setup.sql) into the Supabase
+**SQL Editor** and click **Run**. It combines these files from
+[`supabase/migrations`](supabase/migrations), which you can also run one by one in order:
 
 1. `001_initial_schema.sql` — tables
 2. `002_rls_policies.sql` — row-level security policies
