@@ -102,6 +102,7 @@ In the Supabase **SQL Editor**, run the files in [`supabase/migrations`](supabas
 1. `001_initial_schema.sql` — tables
 2. `002_rls_policies.sql` — row-level security policies
 3. `003_templates_data.sql` — default templates
+4. `004_custom_auth.sql` — adapts `users` for the app's email/password login (required)
 
 Then create a public Storage bucket named **`avatars`**.
 See [docs/DATABASE_SETUP.md](docs/DATABASE_SETUP.md) for a single copy-paste script and troubleshooting.

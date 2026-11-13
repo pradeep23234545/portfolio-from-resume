@@ -1,4 +1,5 @@
 import { NextRequest, NextResponse } from 'next/server';
+import { serverErrorMessage } from '@/lib/utils';
 import { hashPassword, signJWT } from '@/lib/auth';
 import { createServiceClient } from '@/lib/supabase/service';
 import { z } from 'zod';
@@ -57,7 +58,7 @@ export async function POST(req: NextRequest) {
         if (insertError) {
             console.error('Registration Error:', insertError);
             return NextResponse.json(
-                { error: 'Failed to create user' },
+                { error: serverErrorMessage(insertError, 'Failed to create user') },
                 { status: 500 }
             );
         }
@@ -84,7 +85,7 @@ export async function POST(req: NextRequest) {
     } catch (error) {
         console.error('Internal Error:', error);
         return NextResponse.json(
-            { error: 'Internal Server Error' },
+            { error: serverErrorMessage(error) },
             { status: 500 }
         );
     }

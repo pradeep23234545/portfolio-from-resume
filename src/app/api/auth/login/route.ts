@@ -1,4 +1,5 @@
 import { NextRequest, NextResponse } from 'next/server';
+import { serverErrorMessage } from '@/lib/utils';
 import { comparePassword, signJWT } from '@/lib/auth';
 import { createServiceClient } from '@/lib/supabase/service';
 import { z } from 'zod';
@@ -72,7 +73,7 @@ export async function POST(req: NextRequest) {
     } catch (error) {
         console.error('Login Error:', error);
         return NextResponse.json(
-            { error: 'Internal Server Error' },
+            { error: serverErrorMessage(error) },
             { status: 500 }
         );
     }
