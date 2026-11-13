@@ -20,7 +20,7 @@ export async function GET(req: NextRequest) {
             code,
 
 
-            redirect_uri: `${process.env.NEXT_PUBLIC_APP_URL || process.env.RENDER_EXTERNAL_URL || 'https://resume-to-portfolio-7zdz.onrender.com'}/api/auth/github/callback`,
+            redirect_uri: `${process.env.NEXT_PUBLIC_APP_URL || req.nextUrl.origin}/api/auth/github/callback`,
         });
 
         const tokenRes = await fetch('https://github.com/login/oauth/access_token', {
@@ -103,7 +103,7 @@ export async function GET(req: NextRequest) {
 
         // 5. Generate and Set Cookie
         const token = await signJWT({ sub: userId, email });
-        const origin = process.env.NEXT_PUBLIC_APP_URL || process.env.RENDER_EXTERNAL_URL || 'https://resume-to-portfolio-7zdz.onrender.com';
+        const origin = process.env.NEXT_PUBLIC_APP_URL || req.nextUrl.origin;
         const response = NextResponse.redirect(`${origin}/dashboard`);
 
         response.cookies.set('auth-token', token, {
