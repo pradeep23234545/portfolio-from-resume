@@ -22,13 +22,18 @@ const safetySettings = [
 ];
 
 // Google retires model versions regularly. The "-latest" aliases always point at a
-// current model; the rest are fallbacks tried in order if a model returns 404.
-const FALLBACK_MODELS = ['gemini-flash-latest', 'gemini-flash-lite-latest', 'gemini-3.5-flash', 'gemini-3.5-flash-lite'];
+// current model; the rest are fallbacks tried when a model is retired, busy or too slow.
+const FALLBACK_MODELS = ['gemini-flash-lite-latest', 'gemini-flash-latest', 'gemini-3.5-flash-lite', 'gemini-3.5-flash'];
 
 const isModelGone = (error: any) =>
     error?.status === 404 || /404|not found|no longer available/i.test(error?.message || '');
 const isBusy = (error: any) =>
     error?.status === 429 || error?.status === 503 || /\b(429|503)\b/.test(error?.message || '');
+
+const isTimeout = (error: any) =>
+    error?.name === 'AbortError' || error?.name === 'TimeoutError' || /abort|timed? ?out/i.test(error?.message || '');
+
+const REQUEST_TIMEOUT_MS = 60_000;
 
 /** The model that answered last time, so later calls skip retired ones. */
 const workingModel: Record<string, string> = {};
@@ -43,34 +48,29 @@ const createRetryingModel = (preferred: string, config: any) => {
                 : candidates;
             let lastError: any;
 
-            for (const modelName of order) {
-                const model = genAI.getGenerativeModel({ model: modelName, ...config });
-                const maxAttempts = 2; // then move on to the next model
-
-                for (let attempt = 1; attempt <= maxAttempts; attempt++) {
+            // Two passes over the models: a busy, slow or retired model is skipped
+            // immediately; if every model was busy, wait briefly and go round once more.
+            for (let pass = 1; pass <= 2; pass++) {
+                for (const modelName of order) {
+                    // Without a timeout a stalled request can hang the page forever
+                    const model = genAI.getGenerativeModel({ model: modelName, ...config }, { timeout: REQUEST_TIMEOUT_MS });
                     try {
                         const result = await model.generateContent(prompt);
                         workingModel[preferred] = modelName;
                         return result;
                     } catch (error: any) {
                         lastError = error;
-                        if (isModelGone(error)) {
-                            console.warn(`Gemini model ${modelName} is unavailable, trying the next one...`);
-                            break; // next model
+                        if (isModelGone(error) || isBusy(error) || isTimeout(error)) {
+                            console.warn(`Gemini model ${modelName} unavailable (${error.status || error.name || 'error'}), trying the next one...`);
+                            continue;
                         }
-                        if (!isBusy(error)) throw error;
-                        if (attempt === maxAttempts) {
-                            console.warn(`Gemini model ${modelName} is busy, trying the next one...`);
-                            break; // next model
-                        }
-
-                        // Respect the server's retryDelay when given, capped at 30s
-                        const serverDelay = parseFloat(error.message?.match(/"retryDelay":"(\d+\.?\d*)s"/)?.[1] || '0') * 1000;
-                        const delay = Math.min(Math.max(2 ** attempt * 1000, serverDelay + 1000), 30000);
-                        console.warn(`Gemini busy (${error.status || 'unknown'}). Retry ${attempt}/${maxAttempts} in ${delay}ms...`);
-                        await new Promise(resolve => setTimeout(resolve, delay));
+                        throw error;
                     }
                 }
+                if (pass === 1) await new Promise(resolve => setTimeout(resolve, 5000));
+            }
+            if (isBusy(lastError) || isTimeout(lastError)) {
+                throw new Error('Google Gemini is overloaded right now. Please try again in a minute.');
             }
             throw lastError;
         },

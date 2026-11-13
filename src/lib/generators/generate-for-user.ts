@@ -1,5 +1,5 @@
 import { createServiceClient } from '@/lib/supabase/service';
-import { geminiPro, assertGeminiConfigured } from '@/lib/ai/gemini';
+import { geminiFlash, assertGeminiConfigured } from '@/lib/ai/gemini';
 
 export type GenerateResult =
     | {
@@ -18,7 +18,8 @@ function slugify(text: string) {
 
 /** Ask Gemini for JSON and parse it, tolerating ```json fences or extra text. */
 async function askJson<T>(prompt: string): Promise<T> {
-    const result = await geminiPro.generateContent(prompt);
+    // The lite model is fast (a few seconds) and good enough for short JSON answers
+    const result = await geminiFlash.generateContent(prompt);
     const text: string = result.response.text();
     const match = text.match(/\{[\s\S]*\}/);
     if (!match) throw new Error('The AI did not return valid JSON. Please try again.');
@@ -84,6 +85,27 @@ export async function generatePortfolioForUser(userId: string): Promise<Generate
 
         const warnings: string[] = [];
 
+        // Start the second AI request now so both run at the same time
+        const needDescription = p.filter((x: any) => !x.short_description?.trim()).slice(0, 10);
+        const extraPromise = askJson<{
+            projects: { id: string; description: string }[];
+            skills: { id: string; category: string }[];
+        }>(`
+For a developer portfolio, return ONLY JSON with two lists.
+
+1. "projects": for each project below, a 1-2 sentence description (max 30 words) of what it is,
+   based on its name and technologies. Be modest and factual; do not invent features or metrics.
+PROJECTS: ${JSON.stringify(needDescription.map((x: any) => ({ id: x.id, name: x.title, tech: x.technologies, url: x.repo_url })))}
+
+2. "skills": put each skill into exactly one category: "Frontend", "Backend" or "Tools"
+   (languages like Python/Java/C++ and databases go in "Backend"; UI frameworks, HTML/CSS in "Frontend";
+   everything else, including soft skills, in "Tools").
+SKILLS: ${JSON.stringify(sk.map((s: any) => ({ id: s.id, name: s.skill_name })))}
+
+{ "projects": [{ "id": "...", "description": "..." }], "skills": [{ "id": "...", "category": "Frontend" }] }`);
+        // Avoid an "unhandled rejection" if step 1 fails first; step 2 still sees the error
+        extraPromise.catch(() => {});
+
         // ── 1. About section, tagline, SEO ─────────────────────────────
         const about = await askJson<{
             about_me: string;
@@ -127,25 +149,9 @@ Return ONLY JSON:
         }
 
         // ── 2. Project descriptions + skill categories ─────────────────
-        const needDescription = p.filter((x: any) => !x.short_description?.trim()).slice(0, 10);
         let descriptionsWritten = 0;
         try {
-            const extra = await askJson<{
-                projects: { id: string; description: string }[];
-                skills: { id: string; category: string }[];
-            }>(`
-For a developer portfolio, return ONLY JSON with two lists.
-
-1. "projects": for each project below, a 1-2 sentence description (max 30 words) of what it is,
-   based on its name and technologies. Be modest and factual; do not invent features or metrics.
-PROJECTS: ${JSON.stringify(needDescription.map((x: any) => ({ id: x.id, name: x.title, tech: x.technologies, url: x.repo_url })))}
-
-2. "skills": put each skill into exactly one category: "Frontend", "Backend" or "Tools"
-   (languages like Python/Java/C++ and databases go in "Backend"; UI frameworks, HTML/CSS in "Frontend";
-   everything else, including soft skills, in "Tools").
-SKILLS: ${JSON.stringify(sk.map((s: any) => ({ id: s.id, name: s.skill_name })))}
-
-{ "projects": [{ "id": "...", "description": "..." }], "skills": [{ "id": "...", "category": "Frontend" }] }`);
+            const extra = await extraPromise;
 
             const projectIds = new Set(needDescription.map((x: any) => x.id));
             for (const item of extra.projects || []) {
