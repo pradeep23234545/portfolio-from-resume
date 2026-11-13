@@ -5,13 +5,13 @@
   "description": "AI-powered platform that turns a resume, GitHub profile and LinkedIn export into a polished portfolio website.",
   "author": "Pradeep Yedage (https://github.com/pradeep23234545)",
   "license": "MIT",
-  "homepage": "https://github.com/pradeep23234545/resume-to-portfolio#readme",
+  "homepage": "https://github.com/pradeep23234545/portfolio-from-resume#readme",
   "repository": {
     "type": "git",
-    "url": "git+https://github.com/pradeep23234545/resume-to-portfolio.git"
+    "url": "git+https://github.com/pradeep23234545/portfolio-from-resume.git"
   },
   "bugs": {
-    "url": "https://github.com/pradeep23234545/resume-to-portfolio/issues"
+    "url": "https://github.com/pradeep23234545/portfolio-from-resume/issues"
   },
   "engines": {
     "node": ">=20"

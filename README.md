@@ -6,7 +6,7 @@
 
 **Turn a resume, a GitHub profile and a LinkedIn export into a polished portfolio website, written by AI.**
 
-[![CI](https://github.com/pradeep23234545/resume-to-portfolio/actions/workflows/ci.yml/badge.svg)](https://github.com/pradeep23234545/resume-to-portfolio/actions/workflows/ci.yml)
+[![CI](https://github.com/pradeep23234545/portfolio-from-resume/actions/workflows/ci.yml/badge.svg)](https://github.com/pradeep23234545/portfolio-from-resume/actions/workflows/ci.yml)
 ![Next.js](https://img.shields.io/badge/Next.js-16-black?logo=next.js)
 ![React](https://img.shields.io/badge/React-19-61DAFB?logo=react&logoColor=black)
 ![TypeScript](https://img.shields.io/badge/TypeScript-5-3178C6?logo=typescript&logoColor=white)
@@ -67,8 +67,8 @@ and publish it at your own public URL.
 ### 1. Clone and install
 
 ```bash
-git clone https://github.com/pradeep23234545/resume-to-portfolio.git
-cd resume-to-portfolio
+git clone https://github.com/pradeep23234545/portfolio-from-resume.git
+cd portfolio-from-resume
 npm install
 ```
 
