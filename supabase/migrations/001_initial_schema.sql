@@ -449,4 +449,5 @@ INSERT INTO public.templates (name, display_name, description, category, is_prem
   ('minimal', 'Minimal', 'Typography-focused minimalist layout', 'minimal', FALSE, TRUE),
   ('creative', 'Creative', 'Bold and artistic portfolio design', 'creative', TRUE, TRUE),
   ('professional', 'Professional', 'Traditional corporate-style layout', 'professional', FALSE, TRUE),
-  ('startup', 'Startup', 'Dynamic tech-focused design', 'startup', TRUE, TRUE);
+  ('startup', 'Startup', 'Dynamic tech-focused design', 'startup', TRUE, TRUE)
+ON CONFLICT (name) DO NOTHING;

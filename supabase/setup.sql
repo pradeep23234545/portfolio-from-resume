@@ -1,5 +1,5 @@
 -- One-shot database setup for a NEW Supabase project.
--- Paste this whole file into Supabase → SQL Editor → New query → Run.
+-- Paste this whole file into Supabase > SQL Editor > New query > Run.
 -- Generated from supabase/migrations/001-004.
 
 -- ===== 001_initial_schema.sql =====
@@ -454,7 +454,8 @@ INSERT INTO public.templates (name, display_name, description, category, is_prem
   ('minimal', 'Minimal', 'Typography-focused minimalist layout', 'minimal', FALSE, TRUE),
   ('creative', 'Creative', 'Bold and artistic portfolio design', 'creative', TRUE, TRUE),
   ('professional', 'Professional', 'Traditional corporate-style layout', 'professional', FALSE, TRUE),
-  ('startup', 'Startup', 'Dynamic tech-focused design', 'startup', TRUE, TRUE);
+  ('startup', 'Startup', 'Dynamic tech-focused design', 'startup', TRUE, TRUE)
+ON CONFLICT (name) DO NOTHING;
 
 -- ===== 002_rls_policies.sql =====
 -- RLS Policies (users can only access their own data)
@@ -658,7 +659,8 @@ INSERT INTO public.templates (id, name, display_name, description, category, is_
 (uuid_generate_v4(), 'minimal', 'Minimal', 'Minimalist design focusing on content', 'minimal', false, '{"primaryColor": "#000000", "secondaryColor": "#666666", "fontFamily": "System", "layout": "single-page"}'),
 (uuid_generate_v4(), 'creative', 'Creative', 'Vibrant design with animations and gradients', 'creative', true, '{"primaryColor": "#8B5CF6", "secondaryColor": "#EC4899", "fontFamily": "Poppins", "layout": "multi-page"}'),
 (uuid_generate_v4(), 'professional', 'Professional', 'Corporate-friendly design with subtle styling', 'professional', false, '{"primaryColor": "#1F2937", "secondaryColor": "#3B82F6", "fontFamily": "Georgia", "layout": "single-page"}'),
-(uuid_generate_v4(), 'startup', 'Startup', 'Modern startup aesthetic with bold colors', 'startup', true, '{"primaryColor": "#F59E0B", "secondaryColor": "#EF4444", "fontFamily": "Space Mono", "layout": "multi-page"}');
+(uuid_generate_v4(), 'startup', 'Startup', 'Modern startup aesthetic with bold colors', 'startup', true, '{"primaryColor": "#F59E0B", "secondaryColor": "#EF4444", "fontFamily": "Space Mono", "layout": "multi-page"}')
+ON CONFLICT (name) DO UPDATE SET config = EXCLUDED.config, description = EXCLUDED.description;
 
 -- ===== 004_custom_auth.sql =====
 -- The app uses its own email/password auth (bcrypt + JWT), not Supabase Auth.
