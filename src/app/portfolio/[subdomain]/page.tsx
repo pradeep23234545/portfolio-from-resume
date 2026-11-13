@@ -7,6 +7,7 @@ import { loadPortfolio, onlyVisible } from '@/lib/portfolio/load';
 import { ModernTemplate } from '@/components/templates/ModernTemplate';
 import { CreativeTemplate } from '@/components/templates/CreativeTemplate';
 import { MinimalTemplate } from '@/components/templates/MinimalTemplate';
+import { ViewTracker } from '@/components/templates/ViewTracker';
 
 const TEMPLATES = {
     modern: ModernTemplate,
@@ -61,6 +62,8 @@ export default async function PortfolioPage({ params }: { params: Promise<{ subd
                 </div>
             )}
             <Template data={onlyVisible(portfolio.data)} theme={portfolio.theme} font={portfolio.font} />
+            {/* Count visitors only: not the owner, not drafts */}
+            {portfolio.isPublished && !isOwner && <ViewTracker portfolioId={portfolio.id} />}
         </>
     );
 }

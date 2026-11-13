@@ -6,6 +6,8 @@
 
 **Turn a resume, a GitHub profile and a LinkedIn export into a polished portfolio website, written by AI.**
 
+**[Live app](https://pradeepyedage.vercel.app)** · **[Example portfolio](https://pradeepyedage.vercel.app/portfolio/pradeep23234545)**
+
 [![CI](https://github.com/pradeep23234545/portfolio-from-resume/actions/workflows/ci.yml/badge.svg)](https://github.com/pradeep23234545/portfolio-from-resume/actions/workflows/ci.yml)
 ![Next.js](https://img.shields.io/badge/Next.js-16-black?logo=next.js)
 ![React](https://img.shields.io/badge/React-19-61DAFB?logo=react&logoColor=black)
@@ -14,7 +16,7 @@
 ![Gemini](https://img.shields.io/badge/Google-Gemini-4285F4?logo=google&logoColor=white)
 ![License: MIT](https://img.shields.io/badge/License-MIT-yellow.svg)
 
-[Features](#features) · [Tech stack](#tech-stack) · [Getting started](#getting-started) · [Project structure](#project-structure) · [Deployment](#deployment)
+[Features](#features) · [How to use](#how-to-use) · [Tech stack](#tech-stack) · [Getting started](#getting-started) · [Deployment](#deployment) · [Project structure](#project-structure)
 
 </div>
 
@@ -24,24 +26,31 @@
 
 Building a portfolio takes time most developers don't have. **Resume-to-Portfolio**
 collects what you already have — your resume PDF, your GitHub repositories and your
-LinkedIn data — and uses Google Gemini to write project descriptions, an "About me"
-section and a skills summary. You pick a template, tweak the content in a dashboard,
-and publish it at your own public URL.
+LinkedIn profile — and uses Google Gemini to write your "About me", headline, project
+descriptions and skill groups. You review and edit everything with a live preview, pick
+a template, and publish it at your own public URL.
 
 <!-- Add a screenshot or GIF here once you have one:
 ![Dashboard screenshot](docs/screenshot.png) -->
 
 ## Features
 
-- **Resume parsing** — upload a PDF and extract experience, education and skills.
-- **GitHub import** — sign in with GitHub OAuth and pull in repositories, languages and stats.
-- **LinkedIn import** — upload your LinkedIn data export to fill in work history.
-- **AI writing** — Gemini generates project narratives, a professional bio and skill groupings, with automatic retry/fallback between models.
-- **Six templates** — Modern Dev, Mono Focus, Artisan, Career Path, Grid Master and Digital CV.
-- **Dashboard editor** — edit projects, experience and skills; customise colours and layout; live preview.
-- **Public portfolio pages** — each user gets a page at `/portfolio/<subdomain>`.
-- **Analytics** — view counts and engagement charts powered by Recharts.
-- **Secure auth** — email/password (bcrypt + JWT in an HTTP-only cookie) and GitHub OAuth, with route protection in middleware.
+- **Resume & LinkedIn import** — upload a resume PDF or your LinkedIn "Save to PDF" export; Gemini extracts experience, education, skills, projects and contact details. Duplicates across sources are skipped.
+- **GitHub import** — link by username (or GitHub sign-in) to import your public repositories and your profile: name, photo, bio, location, website and X/Twitter.
+- **AI writing** — one click writes your About section, headline, SEO text and missing project descriptions, and sorts skills into Frontend / Backend / Tools. It only uses facts from your data and never overwrites text you edited.
+- **Live editor** — edit your photo, name, headline, About, contact links, projects (show/hide, reorder), experience, education and skills with an instant preview.
+- **Three templates** — Modern, Minimal and Creative, each in five colour themes and three font styles, with profile photo, education and working contact links (email opens Gmail).
+- **Draft & publish** — portfolios stay private drafts until you click **Publish Live**; unpublish any time.
+- **Analytics** — privacy-friendly visit tracking (no IP addresses stored): views, unique visitors, devices, countries and referrers.
+- **Secure auth** — email/password (bcrypt + JWT in an HTTP-only cookie) and optional GitHub OAuth.
+
+## How to use
+
+1. **Sign up** at `/signup`.
+2. **Connect** your data: enter your GitHub username and upload your resume and/or LinkedIn PDF.
+3. **Generate**: the AI builds a draft portfolio (about 10–30 seconds).
+4. **Customize**: review and edit everything with the live preview, pick a template and colours, then **Save**.
+5. **Preview → Publish Live**, and share `https://<your-domain>/portfolio/<your-subdomain>`.
 
 ## Tech stack
 
@@ -52,7 +61,7 @@ and publish it at your own public URL.
 | State/forms| Zustand, React Hook Form, Zod |
 | Data       | Supabase (PostgreSQL, Storage, Row Level Security) |
 | AI         | Google Gemini (`gemini-flash-latest`, `gemini-flash-lite-latest`, with automatic fallback) via `@google/generative-ai` |
-| Integrations | GitHub REST & GraphQL (Octokit), PDF parsing (`pdf-parse`, `pdf2json`, `pdfjs-dist`) |
+| Integrations | GitHub REST API, PDF text extraction (`pdf2json`) |
 | Auth       | `bcryptjs`, `jose` (JWT) |
 
 ## Getting started
@@ -62,7 +71,7 @@ and publish it at your own public URL.
 - **Node.js 20+** and npm
 - A free [Supabase](https://supabase.com) project
 - A [Google Gemini API key](https://aistudio.google.com/app/apikey)
-- A [GitHub OAuth app](https://github.com/settings/developers) (for "Sign in with GitHub")
+- *Optional:* a [GitHub OAuth app](https://github.com/settings/developers), only for "Sign in with GitHub" (linking GitHub by username works without it)
 
 ### 1. Clone and install
 
@@ -87,13 +96,21 @@ Then fill in `.env.local`:
 | `SUPABASE_SERVICE_ROLE_KEY` | ✅ | Supabase service-role key — **server only** |
 | `JWT_SECRET` | ✅ | Long random string used to sign session tokens |
 | `GEMINI_API_KEY` | ✅ | Google Gemini API key |
-| `GITHUB_CLIENT_ID` | ✅ | GitHub OAuth app client ID |
-| `GITHUB_CLIENT_SECRET` | ✅ | GitHub OAuth app client secret |
-| `NEXT_PUBLIC_APP_URL` | ✅ | Base URL of the app, e.g. `http://localhost:3000` |
-| `GITHUB_ACCESS_TOKEN` | — | Optional token for higher GitHub API rate limits |
+| `NEXT_PUBLIC_APP_URL` | ✅ | Base URL of the app, e.g. `http://localhost:3000` or your production URL |
+| `GITHUB_CLIENT_ID` | — | GitHub OAuth app client ID (only for "Sign in with GitHub") |
+| `GITHUB_CLIENT_SECRET` | — | GitHub OAuth app client secret |
+| `GITHUB_ACCESS_TOKEN` | — | Token for higher GitHub API rate limits |
+| `GEMINI_MODEL` / `GEMINI_FAST_MODEL` | — | Override the default Gemini models |
 
-When creating the GitHub OAuth app, set the callback URL to
-`http://localhost:3000/api/auth/github/callback` (or your production URL).
+`JWT_SECRET` must be at least 16 characters in production — the app refuses to sign
+logins without it. Generate one with:
+
+```bash
+node -e "console.log(require('crypto').randomBytes(32).toString('hex'))"
+```
+
+If you use GitHub OAuth, set the app's callback URL to
+`<NEXT_PUBLIC_APP_URL>/api/auth/github/callback`.
 
 ### 3. Set up the database
 
@@ -106,8 +123,8 @@ For a new project, paste [`supabase/setup.sql`](supabase/setup.sql) into the Sup
 3. `003_templates_data.sql` — default templates
 4. `004_custom_auth.sql` — adapts `users` for the app's email/password login (required)
 
-Then create a public Storage bucket named **`avatars`**.
-See [docs/DATABASE_SETUP.md](docs/DATABASE_SETUP.md) for a single copy-paste script and troubleshooting.
+The `avatars` storage bucket for profile photos is created automatically on the first upload.
+See [docs/DATABASE_SETUP.md](docs/DATABASE_SETUP.md) for details and troubleshooting.
 
 ### 4. Run it
 
@@ -126,17 +143,17 @@ Open [http://localhost:3000](http://localhost:3000).
 | `npm start` | Serve the production build |
 | `npm run lint` | Run ESLint |
 | `npm run typecheck` | Run the TypeScript compiler without emitting files |
-| `node scripts/list-models.js` | Check which Gemini models your API key can use |
+| `node scripts/list-models.js` | Check your Gemini key: list available models and test the ones the app uses |
 
 ## Project structure
 
 ```
 src/
-├── actions/              # Server Actions (dashboard, GitHub, resume, settings…)
+├── actions/              # Server Actions: generate, editor save, publish, GitHub, resume…
 ├── app/
 │   ├── (auth)/           # Login, signup, OAuth callback
 │   ├── (dashboard)/      # Dashboard, editor, templates, analytics, settings
-│   ├── api/              # Route handlers: auth, uploads, AI generation
+│   ├── api/              # Route handlers: auth, uploads, generation, analytics, health
 │   ├── portfolio/[subdomain]/  # Public portfolio pages
 │   └── page.tsx          # Landing page
 ├── components/
@@ -146,14 +163,17 @@ src/
 │   └── ui/               # Reusable UI primitives
 ├── lib/
 │   ├── ai/               # Gemini client with retry/fallback
-│   ├── generators/       # Portfolio generation pipeline
-│   ├── github/           # GitHub API client
-│   ├── parsers/          # Resume (PDF) and LinkedIn parsers
+│   ├── generators/       # AI portfolio generation
+│   ├── github/           # GitHub profile import
+│   ├── parsers/          # Resume / LinkedIn PDF parser (Gemini)
+│   ├── portfolio/        # Loads a portfolio for templates and the editor
 │   ├── supabase/         # Browser, server and service-role clients
 │   ├── store/            # Zustand stores
 │   └── auth.ts           # Password hashing and JWT helpers
 └── middleware.ts         # Protects dashboard routes
+supabase/setup.sql        # One-shot database setup (all migrations combined)
 supabase/migrations/      # SQL schema, RLS policies, seed data
+vercel.json               # Daily health check that keeps the free database awake
 scripts/                  # Developer utilities
 ```
 
@@ -161,35 +181,43 @@ scripts/                  # Developer utilities
 
 ```mermaid
 flowchart LR
-    A[Resume PDF] --> P[Parsers]
-    B[GitHub OAuth] --> G[GitHub client]
-    C[LinkedIn export] --> P
-    P --> M[Merge profile data]
-    G --> M
-    M --> AI[Gemini: write bio,<br/>projects, skills]
-    AI --> DB[(Supabase)]
-    DB --> E[Dashboard editor]
-    E --> T[Template renderer]
-    T --> W[/portfolio/subdomain/]
+    A[Resume PDF] --> P[Gemini PDF parser]
+    C[LinkedIn PDF] --> P
+    B[GitHub username] --> G[Repos + profile]
+    P --> DB[(Supabase)]
+    G --> DB
+    DB --> AI[Gemini: About, headline,<br/>descriptions, skill groups]
+    AI --> DB
+    DB --> E[Live editor]
+    E --> DB
+    DB --> T[Template]
+    T --> W["/portfolio/subdomain<br/>(after Publish)"]
 ```
 
 ## Deployment
 
-The app runs on any Node.js host that supports Next.js — for example
-[Vercel](https://vercel.com) or [Render](https://render.com).
+The recommended host is [Vercel](https://vercel.com) (free Hobby plan); Supabase and
+Gemini are already hosted services.
 
 1. Push the repository to GitHub.
-2. Import it in your host and set the environment variables from the table above.
-   Set `NEXT_PUBLIC_APP_URL` to your production URL.
-3. Update your GitHub OAuth app's callback URL to
-   `https://<your-domain>/api/auth/github/callback`.
-4. Build command `npm run build`, start command `npm start`.
+2. In Vercel: **Add New → Project**, import the repo (the Next.js preset is detected).
+3. Under **Environment Variables**, paste the contents of your `.env.local` (at least the
+   five required variables). Do **not** add Vercel's Supabase integration — it would create a
+   new, empty database.
+4. **Deploy.** Under **Settings → Domains** you can add a free `your-name.vercel.app` address.
+5. Set `NEXT_PUBLIC_APP_URL` to that address and redeploy.
+6. Sign in on the live site, open **Preview** and click **Publish Live**.
+
+Every `git push` to `main` redeploys automatically. `vercel.json` schedules a daily call to
+`/api/health` so the free Supabase project is not paused for inactivity. Share only your
+production domain — the long per-deployment URLs require a Vercel login.
 
 ## Roadmap
 
+- [ ] More templates (Career Path, Grid, Digital CV)
+- [ ] Project screenshots and image uploads
+- [ ] Export portfolio as static HTML / PDF
 - [ ] Custom domains per portfolio
-- [ ] More templates and a theme builder
-- [ ] Export portfolio as static HTML
 - [ ] Automated tests
 
 ## Author
