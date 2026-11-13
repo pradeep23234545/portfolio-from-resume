@@ -1,5 +1,6 @@
 import { createServiceClient } from '@/lib/supabase/service';
 import { geminiFlash, assertGeminiConfigured } from '@/lib/ai/gemini';
+import { fetchGithubProfile, saveGithubProfile } from '@/lib/github/profile';
 
 export type GenerateResult =
     | {
@@ -85,6 +86,32 @@ export async function generatePortfolioForUser(userId: string): Promise<Generate
 
         const warnings: string[] = [];
 
+        // Profile facts from GitHub, resume and LinkedIn
+        const { data: sourceRows } = await supabase.from('data_sources').select('source_type, source_data').eq('user_id', userId);
+        const sources: Record<string, any> = Object.fromEntries((sourceRows || []).map((r: any) => [r.source_type, r.source_data || {}]));
+        if (!sources.github && user.github_username) {
+            // GitHub was linked before profiles were imported: fetch it now
+            const result = await fetchGithubProfile(user.github_username);
+            if ('profile' in result) {
+                await saveGithubProfile(supabase, userId, result.profile);
+                sources.github = result.profile;
+            }
+        }
+        const gh = sources.github || {};
+        const cv = sources.resume || {};
+        const li = sources.linkedin || {};
+        const pick = (...values: unknown[]) =>
+            values.map(v => (typeof v === 'string' ? v.trim() : '')).find(Boolean) || '';
+        const profileFacts = {
+            github_bio: gh.bio || null,
+            github_company: gh.company || null,
+            linkedin_headline: li.headline || null,
+            linkedin_summary: li.summary || null,
+            resume_headline: cv.headline || null,
+            resume_summary: cv.summary || null,
+            location: pick(li.location, cv.location, gh.location) || null,
+        };
+
         // Start the second AI request now so both run at the same time
         const needDescription = p.filter((x: any) => !x.short_description?.trim()).slice(0, 10);
         const extraPromise = askJson<{
@@ -116,6 +143,7 @@ SKILLS: ${JSON.stringify(sk.map((s: any) => ({ id: s.id, name: s.skill_name })))
 You write portfolio websites for developers. Using ONLY the facts below, write content for ${user.full_name || 'this developer'}.
 Do not invent employers, degrees, numbers or achievements that are not in the data.
 
+PROFILE (their own words from GitHub/LinkedIn/resume — reuse their voice and facts): ${JSON.stringify(profileFacts)}
 EXPERIENCE: ${JSON.stringify(ex)}
 EDUCATION: ${JSON.stringify(ed)}
 PROJECTS: ${JSON.stringify(p.slice(0, 12).map((x: any) => ({ title: x.title, description: x.short_description, tech: x.technologies })))}
@@ -143,7 +171,16 @@ Return ONLY JSON:
                 section_type: 'about',
                 content: about.about_me,
                 ai_generated_content: about.about_me,
-                metadata: { hero_tagline: about.hero_tagline, location: about.location || '' },
+                metadata: {
+                    hero_tagline: about.hero_tagline,
+                    location: pick(about.location, profileFacts.location),
+                    // Contact details found in the GitHub profile, resume or LinkedIn PDF
+                    phone: pick(cv.contact?.phone, li.contact?.phone),
+                    website: pick(gh.blog, cv.contact?.website, li.contact?.website),
+                    twitter: pick(gh.twitter_username, cv.contact?.twitter, li.contact?.twitter),
+                    show_email: true,
+                    show_phone: false, // phone numbers stay private until the user opts in
+                },
             });
             if (error) warnings.push(`Could not save About section: ${error.message}`);
         }

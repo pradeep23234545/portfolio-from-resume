@@ -72,8 +72,9 @@ export async function createProject(data: { title: string; description: string; 
     const { error } = await supabase.from('projects').insert({
         portfolio_id: portfolio.id,
         title: data.title,
+        slug: `${data.title.toLowerCase().replace(/[^a-z0-9]+/g, '-').replace(/(^-|-$)/g, '') || 'project'}-${Date.now().toString(36)}`,
         short_description: data.description,
-        technologies: JSON.stringify(data.tags),
+        technologies: data.tags,
         is_visible: data.status === 'Published',
         source: 'manual',
         updated_at: new Date().toISOString()

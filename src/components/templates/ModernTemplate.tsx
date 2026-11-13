@@ -1,9 +1,10 @@
 
-import { Mail, Github, Linkedin, ExternalLink, MapPin } from 'lucide-react';
+import { ExternalLink, MapPin, Github, GraduationCap } from 'lucide-react';
 import { Badge } from '@/components/ui/badge';
 import { Button } from '@/components/ui/button';
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
 import { PortfolioData } from '@/lib/data/mockData';
+import { ProfilePhoto, contactLinks, linkProps, projectHref } from './shared';
 
 interface TemplateProps {
     data: PortfolioData;
@@ -60,22 +61,27 @@ export const ModernTemplate = ({ data, theme, font }: TemplateProps) => {
                                 </span>
                             </div>
                         )}
-                        <div className="flex gap-3 pt-4">
-                            <Button className="rounded-full" leftIcon={<Mail className="h-4 w-4" />}>
-                                Contact
-                            </Button>
-                            <Button variant="outline" size="icon" className="rounded-full">
-                                <Github className="h-4 w-4" />
-                            </Button>
-                            <Button variant="outline" size="icon" className="rounded-full">
-                                <Linkedin className="h-4 w-4" />
-                            </Button>
+                        <div className="flex flex-wrap gap-3 pt-4">
+                            {contactLinks(data).map(({ key, label, href, icon: Icon }, i) => (
+                                <a key={key} {...linkProps(href)}>
+                                    {i === 0 ? (
+                                        <Button className="rounded-full" leftIcon={<Icon className="h-4 w-4" />}>
+                                            {key === 'email' ? 'Contact' : label}
+                                        </Button>
+                                    ) : (
+                                        <Button variant="outline" size="icon" className="rounded-full" title={label} aria-label={label}>
+                                            <Icon className="h-4 w-4" />
+                                        </Button>
+                                    )}
+                                </a>
+                            ))}
                         </div>
                     </div>
-                    <div className="hidden md:block w-32 h-32 md:w-48 md:h-48 rounded-full bg-slate-200 overflow-hidden border-4 border-white shadow-lg">
-                        {/* Avatar Placeholder */}
-                        <div className={`w-full h-full ${themeBg}`} />
-                    </div>
+                    <ProfilePhoto
+                        data={data}
+                        className="order-first md:order-last w-28 h-28 md:w-48 md:h-48 border-4 border-white shadow-lg shrink-0"
+                        fallbackClassName={`${themeBg} text-white`}
+                    />
                 </div>
             </header>
 
@@ -87,7 +93,7 @@ export const ModernTemplate = ({ data, theme, font }: TemplateProps) => {
                         Technical Skills
                     </h2>
                     <div className="grid grid-cols-1 md:grid-cols-3 gap-6">
-                        <Card>
+                        {data.skills.frontend.length > 0 && <Card>
                             <CardHeader className="pb-3"><CardTitle className="text-lg">Frontend</CardTitle></CardHeader>
                             <CardContent>
                                 <div className="flex flex-wrap gap-2">
@@ -96,8 +102,8 @@ export const ModernTemplate = ({ data, theme, font }: TemplateProps) => {
                                     ))}
                                 </div>
                             </CardContent>
-                        </Card>
-                        <Card>
+                        </Card>}
+                        {data.skills.backend.length > 0 && <Card>
                             <CardHeader className="pb-3"><CardTitle className="text-lg">Backend</CardTitle></CardHeader>
                             <CardContent>
                                 <div className="flex flex-wrap gap-2">
@@ -106,8 +112,8 @@ export const ModernTemplate = ({ data, theme, font }: TemplateProps) => {
                                     ))}
                                 </div>
                             </CardContent>
-                        </Card>
-                        <Card>
+                        </Card>}
+                        {data.skills.tools.length > 0 && <Card>
                             <CardHeader className="pb-3"><CardTitle className="text-lg">Tools</CardTitle></CardHeader>
                             <CardContent>
                                 <div className="flex flex-wrap gap-2">
@@ -116,7 +122,7 @@ export const ModernTemplate = ({ data, theme, font }: TemplateProps) => {
                                     ))}
                                 </div>
                             </CardContent>
-                        </Card>
+                        </Card>}
                     </div>
                 </section>
 
@@ -126,17 +132,21 @@ export const ModernTemplate = ({ data, theme, font }: TemplateProps) => {
                     <div className="grid grid-cols-1 md:grid-cols-2 gap-8">
                         {data.projects.map(project => (
                             <Card key={project.id} className="overflow-hidden hover:shadow-lg transition-shadow border-slate-200">
-                                <div className="h-48 bg-slate-100 flex items-center justify-center text-slate-300">
-                                    Display Image
-                                </div>
                                 <CardContent className="p-6">
                                     <div className="flex justify-between items-start mb-2">
                                         <h3 className="text-xl font-bold text-slate-900">{project.title}</h3>
-                                        {project.link && (
-                                            <a href={project.link} className={`${themeColor} hover:underline`}>
-                                                <ExternalLink className="h-5 w-5" />
-                                            </a>
-                                        )}
+                                        <div className="flex gap-2 shrink-0">
+                                            {project.repoUrl && (
+                                                <a {...linkProps(project.repoUrl)} className={`${themeColor} hover:opacity-70`} aria-label="Source code">
+                                                    <Github className="h-5 w-5" />
+                                                </a>
+                                            )}
+                                            {projectHref(project) && projectHref(project) !== project.repoUrl && (
+                                                <a {...linkProps(projectHref(project))} className={`${themeColor} hover:opacity-70`} aria-label="Live site">
+                                                    <ExternalLink className="h-5 w-5" />
+                                                </a>
+                                            )}
+                                        </div>
                                     </div>
                                     <p className="text-slate-600 mb-4 line-clamp-3">
                                         {project.description}
@@ -155,7 +165,7 @@ export const ModernTemplate = ({ data, theme, font }: TemplateProps) => {
                 </section>
 
                 {/* Experience Section */}
-                <section>
+                {data.experience.length > 0 && <section>
                     <h2 className="text-2xl font-bold mb-8">Experience</h2>
                     <div className="space-y-8 relative border-l-2 border-slate-200 ml-3 pl-8 pb-4">
                         {data.experience.map((job) => (
@@ -174,7 +184,30 @@ export const ModernTemplate = ({ data, theme, font }: TemplateProps) => {
                             </div>
                         ))}
                     </div>
-                </section>
+                </section>}
+
+                {/* Education Section */}
+                {data.education && data.education.length > 0 && (
+                    <section>
+                        <h2 className="text-2xl font-bold mb-8">Education</h2>
+                        <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
+                            {data.education.map(edu => (
+                                <Card key={edu.id}>
+                                    <CardContent className="p-6 flex gap-4">
+                                        <GraduationCap className={`h-6 w-6 shrink-0 ${themeColor}`} />
+                                        <div>
+                                            <h3 className="font-bold text-slate-900">{edu.institution}</h3>
+                                            <p className="text-slate-600">{[edu.degree, edu.field].filter(Boolean).join(', ')}</p>
+                                            <p className="text-sm text-slate-500 mt-1">
+                                                {[edu.period, edu.grade].filter(Boolean).join(' · ')}
+                                            </p>
+                                        </div>
+                                    </CardContent>
+                                </Card>
+                            ))}
+                        </div>
+                    </section>
+                )}
 
             </main>
 

@@ -1,6 +1,7 @@
 import { NextRequest, NextResponse } from 'next/server';
 import { createServiceClient } from '@/lib/supabase/service';
 import { signJWT, verifyJWT } from '@/lib/auth';
+import { saveGithubProfile } from '@/lib/github/profile';
 
 export async function GET(req: NextRequest) {
     const code = req.nextUrl.searchParams.get('code');
@@ -67,10 +68,7 @@ export async function GET(req: NextRequest) {
         const currentToken = req.cookies.get('auth-token')?.value;
         const current = currentToken ? await verifyJWT(currentToken) : null;
         if (current?.sub) {
-            const { error: linkError } = await (supabase.from('users') as any).update({
-                github_username: githubUser.login,
-                updated_at: new Date().toISOString(),
-            }).eq('id', current.sub);
+            const { error: linkError } = await saveGithubProfile(supabase, current.sub as string, githubUser);
             if (linkError) throw linkError;
 
             const appOrigin = process.env.NEXT_PUBLIC_APP_URL || req.nextUrl.origin;
@@ -98,14 +96,10 @@ export async function GET(req: NextRequest) {
             } as any);
 
             if (insertError) throw insertError;
-        } else {
-            // Update basic info
-            await (supabase.from('users') as any).update({
-                avatar_url: githubUser.avatar_url,
-                github_username: githubUser.login,
-                updated_at: new Date().toISOString()
-            }).eq('id', userId);
         }
+
+        // Store the GitHub profile; fills name/photo only where the user has none
+        await saveGithubProfile(supabase, userId, githubUser);
 
         // 5. Generate and Set Cookie
         const token = await signJWT({ sub: userId, email });

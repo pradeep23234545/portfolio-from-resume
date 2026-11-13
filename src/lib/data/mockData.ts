@@ -1,4 +1,69 @@
-export const portfolioData = {
+/** Everything a portfolio template needs. Built from the database by loadPortfolio(). */
+export interface PortfolioProject {
+    id: string | number;
+    title: string;
+    description: string;
+    tags: string[];
+    /** Live/demo URL */
+    link: string;
+    repoUrl?: string;
+    visible?: boolean;
+}
+
+export interface PortfolioExperience {
+    id: string | number;
+    role: string;
+    company: string;
+    /** Display text, e.g. "Jun 2024 - Present" */
+    period: string;
+    description: string;
+    /** YYYY-MM, used by the editor */
+    startDate?: string;
+    endDate?: string;
+    isCurrent?: boolean;
+    location?: string;
+    visible?: boolean;
+}
+
+export interface PortfolioEducation {
+    id: string | number;
+    institution: string;
+    degree: string;
+    field?: string;
+    period: string;
+    startDate?: string;
+    endDate?: string;
+    grade?: string;
+}
+
+export interface PortfolioData {
+    name: string;
+    email: string;
+    title: string;
+    bio: string;
+    location: string;
+    avatarUrl?: string;
+    phone?: string;
+    website?: string;
+    showEmail?: boolean;
+    showPhone?: boolean;
+    socials: {
+        github: string;
+        linkedin: string;
+        email: string;
+        twitter?: string;
+    };
+    skills: {
+        frontend: string[];
+        backend: string[];
+        tools: string[];
+    };
+    projects: PortfolioProject[];
+    experience: PortfolioExperience[];
+    education?: PortfolioEducation[];
+}
+
+export const portfolioData: PortfolioData = {
     name: "Alex Dev",
     email: "alex@example.com",
     title: "Senior Full Stack Developer",
@@ -55,4 +120,3 @@ export const portfolioData = {
     ]
 };
 
-export type PortfolioData = typeof portfolioData;

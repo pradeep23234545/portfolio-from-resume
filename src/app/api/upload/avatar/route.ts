@@ -39,13 +39,25 @@ export async function POST(request: NextRequest) {
         const fileName = `${userId}-${Date.now()}.${fileExt}`;
         const filePath = `${fileName}`;
 
-        const { data, error } = await supabase
-            .storage
-            .from('avatars')
-            .upload(filePath, buffer, {
-                contentType: file.type,
-                upsert: true
+        const upload = () => supabase.storage.from('avatars').upload(filePath, buffer, {
+            contentType: file.type,
+            upsert: true
+        });
+
+        let { error } = await upload();
+
+        // First upload on a new project: create the public "avatars" bucket, then retry
+        if (error && /bucket not found/i.test(error.message)) {
+            const { error: bucketError } = await supabase.storage.createBucket('avatars', {
+                public: true,
+                fileSizeLimit: 2 * 1024 * 1024,
+                allowedMimeTypes: ['image/*'],
             });
+            if (bucketError && !/already exists/i.test(bucketError.message)) {
+                return NextResponse.json({ error: `Could not create storage bucket: ${bucketError.message}` }, { status: 500 });
+            }
+            ({ error } = await upload());
+        }
 
         if (error) {
             console.error('Supabase storage upload error:', error);

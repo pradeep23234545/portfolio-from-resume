@@ -178,6 +178,13 @@ export async function applyResumeData(sourceType: 'resume' | 'linkedin' = 'resum
         else { results.projects++; existing.projects.push({ title: proj.title }); }
     }
 
+    // 7. Profile: fill the LinkedIn URL from the PDF if the user has none yet
+    const linkedin = typeof data.contact?.linkedin === 'string' ? data.contact.linkedin.trim() : '';
+    if (/linkedin\.com\/in\//i.test(linkedin)) {
+        const url = /^https?:\/\//i.test(linkedin) ? linkedin : `https://${linkedin.replace(/^\/+/, '')}`;
+        await supabase.from('users').update({ linkedin_url: url }).eq('id', userId).is('linkedin_url', null);
+    }
+
     if (errors.length) console.error(`applyResumeData(${sourceType}) errors:`, errors);
 
     return {

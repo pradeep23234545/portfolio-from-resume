@@ -35,7 +35,15 @@ interface ResumeData {
         phone?: string;
         linkedin?: string;
         github?: string;
+        website?: string;
+        twitter?: string;
     };
+    /** Short professional headline, e.g. "Computer Science Student | Web Developer" */
+    headline?: string;
+    /** Professional summary / "About" paragraph, as written in the document */
+    summary?: string;
+    /** "City, Country" */
+    location?: string;
 }
 
 import { geminiFlash, assertGeminiConfigured } from '@/lib/ai/gemini';
@@ -112,9 +120,14 @@ async function extractResumeWithAI(text: string): Promise<ResumeData> {
         contact: {
             email?: string;
             phone?: string;
-            linkedin?: string;
-            github?: string;
+            linkedin?: string; // full profile URL
+            github?: string; // full profile URL
+            website?: string; // personal site / portfolio URL
+            twitter?: string;
         };
+        headline?: string; // the person's professional headline, if present
+        summary?: string; // the "Summary"/"About"/"Profile" paragraph, copied as written
+        location?: string; // "City, Country" if stated
     }
 
     RESUME TEXT:

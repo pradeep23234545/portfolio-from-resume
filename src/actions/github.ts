@@ -1,6 +1,7 @@
 'use server';
 
 import { createServiceClient } from '@/lib/supabase/service';
+import { fetchGithubProfile, saveGithubProfile } from '@/lib/github/profile';
 import { verifyJWT } from '@/lib/auth';
 import { cookies } from 'next/headers';
 
@@ -25,6 +26,10 @@ export async function syncGithubRepositories() {
     if (!user || !user.github_username) {
         return { error: 'No GitHub username linked' };
     }
+
+    // Refresh the GitHub profile (name, photo, bio, location, website…) used by the generator
+    const profileResult = await fetchGithubProfile(user.github_username);
+    if ('profile' in profileResult) await saveGithubProfile(supabase, userId, profileResult.profile);
 
     // 2. Get Portfolio ID
     const { data: rawPortfolio } = await supabase.from('portfolios').select('id').eq('user_id', userId).maybeSingle();
@@ -166,30 +171,17 @@ export async function linkGithubUsername(input: string) {
         return { error: 'That does not look like a GitHub username.' };
     }
 
-    const headers: Record<string, string> = { Accept: 'application/vnd.github.v3+json' };
-    if (process.env.GITHUB_ACCESS_TOKEN) headers.Authorization = `token ${process.env.GITHUB_ACCESS_TOKEN}`;
+    const result = await fetchGithubProfile(username);
+    if ('error' in result) return { error: result.error };
+    const profile = result.profile;
 
-    const res = await fetch(`https://api.github.com/users/${encodeURIComponent(username)}`, { headers });
-    if (res.status === 404) return { error: `GitHub user "${username}" was not found.` };
-    if (!res.ok) return { error: `GitHub API error: ${res.status} ${res.statusText}` };
-    const profile = await res.json();
-
+    // Saves username + profile (name, photo, bio, location, website…) without overwriting user edits
     const supabase = createServiceClient() as any;
-    const { error } = await supabase
-        .from('users')
-        .update({
-            github_username: profile.login,
-            updated_at: new Date().toISOString(),
-        })
-        .eq('id', userId);
-
+    const { error } = await saveGithubProfile(supabase, userId, profile);
     if (error) {
         if (error.code === '23505') return { error: 'This GitHub account is already linked to another user.' };
         return { error: error.message };
     }
-
-    // Use the GitHub avatar if the user has none yet
-    await supabase.from('users').update({ avatar_url: profile.avatar_url }).eq('id', userId).is('avatar_url', null);
 
     const sync = await syncGithubRepositories();
     return { success: true, username: profile.login as string, count: sync.count ?? 0, syncError: sync.error };

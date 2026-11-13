@@ -197,7 +197,7 @@ export default function ProjectsPage() {
                                             </Button>
                                         </DropdownMenuTrigger>
                                         <DropdownMenuContent align="end">
-                                            <DropdownMenuItem>Edit</DropdownMenuItem>
+                                            <DropdownMenuItem onClick={() => { window.location.href = '/customize'; }}>Edit</DropdownMenuItem>
                                             <DropdownMenuItem>View Details</DropdownMenuItem>
                                             <DropdownMenuItem className="text-red-600">Delete</DropdownMenuItem>
                                         </DropdownMenuContent>

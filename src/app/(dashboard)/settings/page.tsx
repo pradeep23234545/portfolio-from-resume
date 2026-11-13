@@ -7,7 +7,7 @@ import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
 import { Tabs, TabsContent, TabsList, TabsTrigger } from '@/components/ui/tabs';
 import { Badge } from '@/components/ui/badge';
-import Image from 'next/image';
+import Link from 'next/link';
 
 export default function SettingsPage() {
     const [mounted, setMounted] = useState(false);
@@ -15,7 +15,6 @@ export default function SettingsPage() {
     const [user, setUser] = useState<any>(null);
     const [portfolio, setPortfolio] = useState<any>(null);
     const [saving, setSaving] = useState(false);
-    const [avatarUploading, setAvatarUploading] = useState(false);
 
     useEffect(() => {
         setMounted(true);
@@ -37,23 +36,6 @@ export default function SettingsPage() {
         }
     };
 
-    const handleSaveProfile = async () => {
-        setSaving(true);
-        try {
-            const { updateProfile } = await import('@/actions/settings');
-            const result = await updateProfile(user);
-            if (result.success) {
-                alert('Profile updated successfully!');
-            } else {
-                alert('Failed to update profile: ' + result.error);
-            }
-        } catch (error) {
-            alert('An error occurred');
-        } finally {
-            setSaving(false);
-        }
-    };
-
     const handleSavePortfolio = async () => {
         setSaving(true);
         try {
@@ -68,66 +50,6 @@ export default function SettingsPage() {
             alert('An error occurred');
         } finally {
             setSaving(false);
-        }
-    };
-
-    const handleAvatarUpload = async (e: React.ChangeEvent<HTMLInputElement>) => {
-        const file = e.target.files?.[0];
-        if (!file) return;
-
-        if (file.size > 2 * 1024 * 1024) {
-            alert('File size too large. Please upload an image smaller than 2MB.');
-            return;
-        }
-
-        setAvatarUploading(true);
-        const formData = new FormData();
-        formData.append('file', file);
-
-        try {
-            const response = await fetch('/api/upload/avatar', {
-                method: 'POST',
-                body: formData,
-            });
-
-            const data = await response.json();
-
-            if (!response.ok) {
-                throw new Error(data.error || 'Upload failed');
-            }
-
-            // Update local state
-            const updatedUser = { ...user, avatar: data.url }; // assuming 'avatar' or 'avatarUrl' in user object
-            // The user object likely expects 'avatar_url' or similar based on DB schema. 
-            // Checking previous code, user state structure seemed loose. 
-            // Let's check how it's used: user?.fullName... it seems we might need to verify the field name. 
-            // In settings/page.tsx line 109, it uses charAt logic fallback. 
-            // Let's assume we want to store it in `avatar_url` or `avatarUrl`.
-            // Looking at docs/DATABASE_SETUP.md, table is `users` with `avatar_url TEXT`.
-            // So we should update `avatar_url`.
-
-            // However, the `user` state here comes from `getSettings` action.
-            // Let's assume we update `avatarUrl` property on the user object if that's what the UI expects, 
-            // or maybe the UI renders `user.avatar_url`.
-            // The current UI DOES NOT render the image yet! It only renders initials:
-            // `{user?.fullName?.charAt(0) || user?.email?.charAt(0)}`
-            // So we need to update the UI to show the image if available.
-
-            setUser({ ...user, avatarUrl: data.url });
-
-            // Persist to DB immediately
-            const { updateProfile } = await import('@/actions/settings');
-            // updateProfile probably takes the whole user object. 
-            // We should make sure it handles avatarUrl.
-            await updateProfile({ ...user, avatarUrl: data.url });
-
-        } catch (error: any) {
-            console.error('Avatar upload error:', error);
-            alert('Failed to upload avatar: ' + error.message);
-        } finally {
-            setAvatarUploading(false);
-            // Reset input
-            e.target.value = '';
         }
     };
 
@@ -153,107 +75,16 @@ export default function SettingsPage() {
                 <TabsContent value="profile" className="space-y-6 mt-6">
                     <Card>
                         <CardHeader>
-                            <CardTitle>Public Profile</CardTitle>
-                            <CardDescription>This information will be displayed on your portfolio.</CardDescription>
+                            <CardTitle>Profile</CardTitle>
+                            <CardDescription>
+                                Your name, photo, headline, About text and contact links are edited together with
+                                the rest of your portfolio, with a live preview.
+                            </CardDescription>
                         </CardHeader>
-                        <CardContent className="space-y-6">
-                            <div className="flex items-center gap-6">
-                                <div className="relative h-24 w-24 rounded-full bg-slate-100 overflow-hidden border-2 border-white shadow-md">
-                                    {user?.avatarUrl ? (
-                                        <div className="relative w-full h-full">
-                                            {/* Using standard img tag for simplicity with external URLs without configuring next/image domains immediately */}
-                                            <img
-                                                src={user.avatarUrl}
-                                                alt="Avatar"
-                                                className="w-full h-full object-cover"
-                                            />
-                                        </div>
-                                    ) : (
-                                        <div className="flex items-center justify-center h-full w-full text-2xl font-bold text-slate-400">
-                                            {user?.fullName?.charAt(0) || user?.email?.charAt(0)}
-                                        </div>
-                                    )}
-                                </div>
-                                <div>
-                                    <input
-                                        type="file"
-                                        id="avatar-upload"
-                                        accept="image/*"
-                                        className="hidden"
-                                        onChange={handleAvatarUpload}
-                                        disabled={avatarUploading}
-                                    />
-                                    <Button
-                                        variant="outline"
-                                        size="sm"
-                                        onClick={() => document.getElementById('avatar-upload')?.click()}
-                                        disabled={avatarUploading}
-                                    >
-                                        <Upload className="h-4 w-4 mr-2" />
-                                        {avatarUploading ? 'Uploading...' : 'Change Avatar'}
-                                    </Button>
-                                    <p className="text-xs text-slate-500 mt-2">
-                                        JPG, GIF or PNG. 2MB max.
-                                    </p>
-                                </div>
-                            </div>
-
-                            <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
-                                <div className="space-y-2">
-                                    <label className="text-sm font-medium text-slate-900">Full Name</label>
-                                    <Input
-                                        value={user?.fullName || ''}
-                                        onChange={(e) => setUser({ ...user, fullName: e.target.value })}
-                                    />
-                                </div>
-                                <div className="space-y-2">
-                                    <label className="text-sm font-medium text-slate-900">Job Title</label>
-                                    <Input
-                                        value={user?.jobTitle || ''}
-                                        onChange={(e) => setUser({ ...user, jobTitle: e.target.value })}
-                                    />
-                                </div>
-                            </div>
-
-                            <div className="space-y-2">
-                                <label className="text-sm font-medium text-slate-900">Bio</label>
-                                <textarea
-                                    className="flex min-h-[120px] w-full rounded-md border border-slate-200 bg-white px-3 py-2 text-sm ring-offset-white placeholder:text-slate-500 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-slate-950 focus-visible:ring-offset-2 disabled:cursor-not-allowed disabled:opacity-50"
-                                    value={user?.bio || ''}
-                                    onChange={(e) => setUser({ ...user, bio: e.target.value })}
-                                />
-                            </div>
-
-                            <div className="space-y-4 pt-4">
-                                <h4 className="text-sm font-semibold text-slate-900">Social Links</h4>
-                                <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
-                                    <div className="flex items-center gap-2">
-                                        <Github className="h-5 w-5 text-slate-500" />
-                                        <Input
-                                            placeholder="GitHub Username"
-                                            value={user?.socials?.github || ''}
-                                            onChange={(e) => setUser({ ...user, socials: { ...user.socials, github: e.target.value } })}
-                                        />
-                                    </div>
-                                    <div className="flex items-center gap-2">
-                                        <Linkedin className="h-5 w-5 text-blue-600" />
-                                        <Input
-                                            placeholder="LinkedIn URL"
-                                            value={user?.socials?.linkedin || ''}
-                                            onChange={(e) => setUser({ ...user, socials: { ...user.socials, linkedin: e.target.value } })}
-                                        />
-                                    </div>
-                                    <div className="flex items-center gap-2">
-                                        <Mail className="h-5 w-5 text-slate-500" />
-                                        <Input value={user?.email || ''} disabled />
-                                    </div>
-                                </div>
-                            </div>
-                        </CardContent>
                         <CardFooter className="bg-slate-50/50 border-t border-slate-100 p-4 flex justify-end">
-                            <Button variant="primary" onClick={handleSaveProfile} disabled={saving}>
-                                {saving ? 'Saving...' : 'Save Profile'}
-                            </Button>
+                            <Link href="/customize">
+                                <Button variant="primary">Edit profile & portfolio</Button>
+                            </Link>
                         </CardFooter>
                     </Card>
                 </TabsContent>

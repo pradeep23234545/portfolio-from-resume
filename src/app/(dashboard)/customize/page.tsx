@@ -12,8 +12,9 @@ import { MinimalTemplate } from '@/components/templates/MinimalTemplate';
 import { CreativeTemplate } from '@/components/templates/CreativeTemplate';
 import { usePortfolioStore } from '@/lib/store/usePortfolioStore';
 import ContentEditor from '@/components/dashboard/ContentEditor';
-import { savePortfolio } from '@/actions/save-portfolio';
-import { getUserSubdomain } from '@/actions/user';
+import Link from 'next/link';
+import { getMyPortfolio, saveMyPortfolio } from '@/actions/portfolio-editor';
+import { onlyVisibleClient } from '@/lib/portfolio/visible';
 
 export default function CustomizePage() {
     const {
@@ -25,23 +26,31 @@ export default function CustomizePage() {
         setTemplate,
         setTheme,
         setFont,
-        setDeviceView
+        setDeviceView,
+        setData
     } = usePortfolioStore();
 
     const [isSaving, setIsSaving] = useState(false);
     const [saveMessage, setSaveMessage] = useState('');
     const [isSidebarOpen, setIsSidebarOpen] = useState(true);
-    const [portfolioUrl, setPortfolioUrl] = useState('/portfolio/demo-user');
+    const [portfolioUrl, setPortfolioUrl] = useState<string | null>(null);
+    // 'loading' until the real portfolio is in the editor; Save stays disabled until then
+    const [loadState, setLoadState] = useState<'loading' | 'ready' | 'empty'>('loading');
 
     useEffect(() => {
-        async function fetchSubdomain() {
-            const subdomain = await getUserSubdomain();
-            if (subdomain) {
-                setPortfolioUrl(`/portfolio/${subdomain}`);
+        getMyPortfolio().then(portfolio => {
+            if (!portfolio) {
+                setLoadState('empty');
+                return;
             }
-        }
-        fetchSubdomain();
-    }, []);
+            setData(portfolio.data);
+            setTemplate(portfolio.template);
+            setTheme(portfolio.theme);
+            setFont(portfolio.font);
+            setPortfolioUrl(`/portfolio/${portfolio.subdomain}`);
+            setLoadState('ready');
+        }).catch(() => setLoadState('empty'));
+    }, [setData, setTemplate, setTheme, setFont]);
 
     const templates = [
         {
@@ -113,12 +122,15 @@ export default function CustomizePage() {
         setIsSaving(true);
         setSaveMessage('');
         try {
-            const result = await savePortfolio(data, template, theme, font);
-            if (result.success) {
-                setSaveMessage('Saved successfully!');
+            const result = await saveMyPortfolio({ data, template, theme, font });
+            if ('success' in result) {
+                setSaveMessage('Saved!');
                 setTimeout(() => setSaveMessage(''), 3000);
+                // Reload so newly added items get their database ids
+                const fresh = await getMyPortfolio();
+                if (fresh) setData(fresh.data);
             } else {
-                setSaveMessage(result.error || 'Failed to save.');
+                setSaveMessage(result.error);
             }
         } catch (error: any) {
             setSaveMessage(error.message || 'Error saving.');
@@ -128,7 +140,8 @@ export default function CustomizePage() {
     };
 
     const renderTemplate = () => {
-        const props = { data, theme, font };
+        // Preview exactly what visitors will see (hidden items removed)
+        const props = { data: onlyVisibleClient(data), theme, font };
         switch (template) {
             case 'minimal': return <MinimalTemplate {...props} />;
             case 'creative': return <CreativeTemplate {...props} />;
@@ -142,12 +155,12 @@ export default function CustomizePage() {
             <div className={`${isSidebarOpen ? 'lg:w-96' : 'w-0 opacity-0 overflow-hidden'} transition-all duration-300 ease-in-out flex flex-col h-full z-20 flex-shrink-0`}>
                 <Card className="h-full border-slate-200 shadow-xl flex flex-col">
                     <CardHeader className="border-b border-slate-100 pb-4">
-                        <CardTitle className="text-xl">Customize Design</CardTitle>
-                        <CardDescription>Personalize your portfolio style.</CardDescription>
+                        <CardTitle className="text-xl">Edit Portfolio</CardTitle>
+                        <CardDescription>Edit your content and design. Changes appear in the preview instantly.</CardDescription>
                     </CardHeader>
 
                     <div className="flex-1 overflow-y-auto">
-                        <Tabs defaultValue="templates" className="w-full">
+                        <Tabs defaultValue="content" className="w-full">
                             <div className="px-6 pt-4 sticky top-0 bg-white z-10 pb-2">
                                 <TabsList className="w-full grid grid-cols-4">
                                     <TabsTrigger value="templates" className="text-xs px-1">Templates</TabsTrigger>
@@ -253,7 +266,7 @@ export default function CustomizePage() {
                             size="lg"
                             variant="primary"
                             onClick={handleSave}
-                            disabled={isSaving}
+                            disabled={isSaving || loadState !== 'ready'}
                         >
                             {isSaving ? (
                                 <>
@@ -316,7 +329,8 @@ export default function CustomizePage() {
                         variant="ghost"
                         size="sm"
                         rightIcon={<ExternalLink className="h-4 w-4" />}
-                        onClick={() => window.open(portfolioUrl, '_blank')}
+                        onClick={() => portfolioUrl && window.open(portfolioUrl, '_blank')}
+                        disabled={!portfolioUrl}
                     >
                         Open Live
                     </Button>
@@ -339,7 +353,19 @@ export default function CustomizePage() {
                         >
                             {/* Render Selected Template */}
                             <div className="w-full h-full overflow-y-auto custom-scrollbar">
-                                {renderTemplate()}
+                                {loadState === 'ready' ? renderTemplate() : (
+                                    <div className="flex h-full min-h-[400px] flex-col items-center justify-center gap-3 p-8 text-center text-slate-500">
+                                        {loadState === 'loading' ? (
+                                            <><Loader2 className="h-6 w-6 animate-spin" /> Loading your portfolio…</>
+                                        ) : (
+                                            <>
+                                                <p className="font-medium text-slate-900">No portfolio yet</p>
+                                                <p className="text-sm">Connect GitHub or upload your resume, then generate your portfolio.</p>
+                                                <Link href="/connect"><Button variant="primary" size="sm">Go to Connect</Button></Link>
+                                            </>
+                                        )}
+                                    </div>
+                                )}
                             </div>
                         </div>
                     </div>

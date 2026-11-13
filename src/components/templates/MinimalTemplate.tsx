@@ -1,8 +1,7 @@
 
-import { Mail, Github, Linkedin, ExternalLink, MapPin } from 'lucide-react';
-import { Badge } from '@/components/ui/badge';
-import { Button } from '@/components/ui/button';
+import { ExternalLink, MapPin } from 'lucide-react';
 import { PortfolioData } from '@/lib/data/mockData';
+import { ProfilePhoto, contactLinks, linkProps, projectHref } from './shared';
 
 interface TemplateProps {
     data: PortfolioData;
@@ -33,6 +32,7 @@ export const MinimalTemplate = ({ data, theme, font }: TemplateProps) => {
 
                 {/* Header */}
                 <header className="space-y-6">
+                    <ProfilePhoto data={data} className="w-20 h-20 grayscale-[30%]" fallbackClassName="bg-black text-white" />
                     <h1 className="text-5xl md:text-7xl font-bold tracking-tight">
                         {data.name}.
                     </h1>
@@ -43,10 +43,15 @@ export const MinimalTemplate = ({ data, theme, font }: TemplateProps) => {
                         {data.bio}
                     </p>
 
+                    {data.location && (
+                        <p className="flex items-center gap-1.5 text-gray-400"><MapPin className="h-4 w-4" />{data.location}</p>
+                    )}
                     <div className="flex gap-4 pt-4">
-                        <a href={data.socials.email} className="text-gray-400 hover:text-black transition-colors"><Mail className="h-6 w-6" /></a>
-                        <a href={data.socials.github} className="text-gray-400 hover:text-black transition-colors"><Github className="h-6 w-6" /></a>
-                        <a href={data.socials.linkedin} className="text-gray-400 hover:text-black transition-colors"><Linkedin className="h-6 w-6" /></a>
+                        {contactLinks(data).map(({ key, label, href, icon: Icon }) => (
+                            <a key={key} {...linkProps(href)} title={label} aria-label={label} className="text-gray-400 hover:text-black transition-colors">
+                                <Icon className="h-6 w-6" />
+                            </a>
+                        ))}
                     </div>
                 </header>
 
@@ -60,11 +65,11 @@ export const MinimalTemplate = ({ data, theme, font }: TemplateProps) => {
 
                     <div className="space-y-16">
                         {data.projects.map(project => (
-                            <div key={project.id} className="group cursor-pointer">
+                            <div key={project.id} className="group">
                                 <div className="flex flex-col md:flex-row md:items-baseline justify-between mb-2">
                                     <h3 className="text-2xl font-medium group-hover:text-gray-600 transition-colors">{project.title}</h3>
-                                    {project.link && (
-                                        <a href={project.link} className={`text-sm ${themeColor} opacity-0 group-hover:opacity-100 transition-opacity flex items-center gap-1`}>
+                                    {projectHref(project) && (
+                                        <a {...linkProps(projectHref(project))} className={`text-sm ${themeColor} md:opacity-0 group-hover:opacity-100 transition-opacity flex items-center gap-1`}>
                                             View Project <ExternalLink className="h-3 w-3" />
                                         </a>
                                     )}
@@ -106,22 +111,40 @@ export const MinimalTemplate = ({ data, theme, font }: TemplateProps) => {
                     {/* Skills */}
                     <section>
                         <h2 className="text-sm font-bold uppercase tracking-widest text-gray-400 mb-8">Skills</h2>
-                        <div className="flex flex-wrap gap-x-8 gap-y-2">
-                            <div>
-                                <h4 className="text-xs font-semibold mb-2">Frontend</h4>
-                                <ul className="text-sm text-gray-500 space-y-1">
-                                    {data.skills.frontend.map(s => <li key={s}>{s}</li>)}
-                                </ul>
-                            </div>
-                            <div>
-                                <h4 className="text-xs font-semibold mb-2">Backend</h4>
-                                <ul className="text-sm text-gray-500 space-y-1">
-                                    {data.skills.backend.map(s => <li key={s}>{s}</li>)}
-                                </ul>
-                            </div>
+                        <div className="flex flex-wrap gap-x-8 gap-y-6">
+                            {([['Frontend', data.skills.frontend], ['Backend', data.skills.backend], ['Tools', data.skills.tools]] as const)
+                                .filter(([, list]) => list.length > 0)
+                                .map(([label, list]) => (
+                                    <div key={label}>
+                                        <h4 className="text-xs font-semibold mb-2">{label}</h4>
+                                        <ul className="text-sm text-gray-500 space-y-1">
+                                            {list.map(s => <li key={s}>{s}</li>)}
+                                        </ul>
+                                    </div>
+                                ))}
                         </div>
                     </section>
                 </div>
+
+                {data.education && data.education.length > 0 && (
+                    <>
+                        <hr className="border-gray-100" />
+                        <section>
+                            <h2 className="text-sm font-bold uppercase tracking-widest text-gray-400 mb-8">Education</h2>
+                            <div className="space-y-6">
+                                {data.education.map(edu => (
+                                    <div key={edu.id} className="flex flex-col md:flex-row md:justify-between md:items-baseline gap-1">
+                                        <div>
+                                            <h4 className="font-medium">{edu.institution}</h4>
+                                            <p className="text-sm text-gray-500">{[edu.degree, edu.field].filter(Boolean).join(', ')}</p>
+                                        </div>
+                                        <span className="text-sm text-gray-400">{[edu.period, edu.grade].filter(Boolean).join(' · ')}</span>
+                                    </div>
+                                ))}
+                            </div>
+                        </section>
+                    </>
+                )}
 
                 <footer className="pt-24 text-center">
                     <p className="text-xs text-gray-300">© {new Date().getFullYear()} {data.name}</p>
