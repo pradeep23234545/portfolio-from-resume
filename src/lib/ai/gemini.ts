@@ -21,71 +21,79 @@ const safetySettings = [
     },
 ];
 
-const createRetryingModel = (modelName: string, config: any) => {
-    const model = genAI.getGenerativeModel({
-        model: modelName,
-        ...config
-    });
+// Google retires model versions regularly. The "-latest" aliases always point at a
+// current model; the rest are fallbacks tried in order if a model returns 404.
+const FALLBACK_MODELS = ['gemini-flash-latest', 'gemini-flash-lite-latest', 'gemini-3.5-flash', 'gemini-3.5-flash-lite'];
+
+const isModelGone = (error: any) =>
+    error?.status === 404 || /404|not found|no longer available/i.test(error?.message || '');
+const isBusy = (error: any) =>
+    error?.status === 429 || error?.status === 503 || /\b(429|503)\b/.test(error?.message || '');
+
+/** The model that answered last time, so later calls skip retired ones. */
+const workingModel: Record<string, string> = {};
+
+const createRetryingModel = (preferred: string, config: any) => {
+    const candidates = [...new Set([preferred, ...FALLBACK_MODELS])];
 
     return {
-        ...model,
         generateContent: async (prompt: any) => {
-            let attempt = 0;
-            const maxAttempts = 10; // Increased to handle long waits
+            const order = workingModel[preferred]
+                ? [workingModel[preferred], ...candidates.filter(m => m !== workingModel[preferred])]
+                : candidates;
+            let lastError: any;
 
-            while (attempt < maxAttempts) {
-                try {
-                    return await model.generateContent(prompt);
-                } catch (error: any) {
-                    // Check for 429 or 503 (service unavailable)
-                    if (error.status === 429 || error.message?.includes('429') || error.status === 503) {
-                        attempt++;
-                        if (attempt === maxAttempts) throw error;
+            for (const modelName of order) {
+                const model = genAI.getGenerativeModel({ model: modelName, ...config });
+                const maxAttempts = 2; // then move on to the next model
 
-                        let delay = Math.pow(2, attempt) * 1000;
-
-                        // Parse retryDelay from error message if available
-                        // Example: "retryDelay":"35s" || "retryDelay": "35.59s"
-                        const match = error.message?.match(/"retryDelay":"(\d+\.?\d*)s"/);
-                        if (match && match[1]) {
-                            const serverDelay = parseFloat(match[1]) * 1000;
-                            if (serverDelay > delay) {
-                                delay = serverDelay + 1000; // Add buffer
-                            }
+                for (let attempt = 1; attempt <= maxAttempts; attempt++) {
+                    try {
+                        const result = await model.generateContent(prompt);
+                        workingModel[preferred] = modelName;
+                        return result;
+                    } catch (error: any) {
+                        lastError = error;
+                        if (isModelGone(error)) {
+                            console.warn(`Gemini model ${modelName} is unavailable, trying the next one...`);
+                            break; // next model
+                        }
+                        if (!isBusy(error)) throw error;
+                        if (attempt === maxAttempts) {
+                            console.warn(`Gemini model ${modelName} is busy, trying the next one...`);
+                            break; // next model
                         }
 
-                        // Cap delay at 60s to avoid indefinite hangs
-                        if (delay > 60000) delay = 60000;
-
-                        console.warn(`Gemini API error (${error.status || 'unknown'}). Retrying attempt ${attempt}/${maxAttempts} in ${delay}ms...`);
-
+                        // Respect the server's retryDelay when given, capped at 30s
+                        const serverDelay = parseFloat(error.message?.match(/"retryDelay":"(\d+\.?\d*)s"/)?.[1] || '0') * 1000;
+                        const delay = Math.min(Math.max(2 ** attempt * 1000, serverDelay + 1000), 30000);
+                        console.warn(`Gemini busy (${error.status || 'unknown'}). Retry ${attempt}/${maxAttempts} in ${delay}ms...`);
                         await new Promise(resolve => setTimeout(resolve, delay));
-                        continue;
                     }
-                    throw error;
                 }
             }
-        }
-    } as any; // Type casting to satisfy basic usage
+            throw lastError;
+        },
+    } as any;
 };
 
-export const geminiPro = createRetryingModel(process.env.GEMINI_MODEL || 'gemini-2.5-flash', {
+export const geminiPro = createRetryingModel(process.env.GEMINI_MODEL || 'gemini-flash-latest', {
     safetySettings,
     generationConfig: {
         temperature: 0.7,
         topK: 40,
         topP: 0.95,
-        maxOutputTokens: 8192,
+        maxOutputTokens: 16384,
     },
 });
 
-export const geminiFlash = createRetryingModel(process.env.GEMINI_FAST_MODEL || 'gemini-2.5-flash-lite', {
+export const geminiFlash = createRetryingModel(process.env.GEMINI_FAST_MODEL || 'gemini-flash-lite-latest', {
     safetySettings,
     generationConfig: {
-        temperature: 0.9,
+        temperature: 0.4, // lower = more reliable JSON extraction
         topK: 40,
         topP: 0.95,
-        maxOutputTokens: 4096,
+        maxOutputTokens: 16384,
     },
 });
 

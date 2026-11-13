@@ -51,7 +51,7 @@ and publish it at your own public URL.
 | Styling    | Tailwind CSS, Radix UI primitives, shadcn/ui-style components, Framer Motion, Lucide icons |
 | State/forms| Zustand, React Hook Form, Zod |
 | Data       | Supabase (PostgreSQL, Storage, Row Level Security) |
-| AI         | Google Gemini (`gemini-2.0-flash`, `gemini-2.0-flash-lite`) via `@google/generative-ai` |
+| AI         | Google Gemini (`gemini-flash-latest`, `gemini-flash-lite-latest`, with automatic fallback) via `@google/generative-ai` |
 | Integrations | GitHub REST & GraphQL (Octokit), PDF parsing (`pdf-parse`, `pdf2json`, `pdfjs-dist`) |
 | Auth       | `bcryptjs`, `jose` (JWT) |
 
