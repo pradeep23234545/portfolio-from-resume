@@ -53,7 +53,7 @@ async function getOrCreatePortfolio(supabase: any, userId: string, user: { email
  *  1. writes the About section, hero tagline, location and SEO description
  *  2. writes short descriptions for projects that have none and sorts skills
  *     into Frontend / Backend / Tools
- *  3. publishes the portfolio
+ *  3. saves SEO text (publishing is a separate step the user takes)
  */
 export async function generatePortfolioForUser(userId: string): Promise<GenerateResult> {
     try {
@@ -212,17 +212,15 @@ Return ONLY JSON:
             warnings.push(`Skipped project descriptions/skill grouping: ${error instanceof Error ? error.message : error}`);
         }
 
-        // ── 3. Publish ─────────────────────────────────────────────────
+        // ── 3. SEO ─────────────────────────────────────────────────────
         const now = new Date().toISOString();
-        const { error: publishError } = await supabase.from('portfolios').update({
+        const { error: seoError } = await supabase.from('portfolios').update({
             seo_title: `${user.full_name || 'Portfolio'} — ${about.hero_tagline}`,
             seo_description: about.meta_description,
-            is_published: true,
-            published_at: now,
             last_synced_at: now,
             updated_at: now,
         }).eq('id', portfolio.id);
-        if (publishError) warnings.push(`Could not publish: ${publishError.message}`);
+        if (seoError) warnings.push(`Could not save SEO text: ${seoError.message}`);
 
         return {
             success: true,

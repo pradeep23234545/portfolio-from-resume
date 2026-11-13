@@ -186,7 +186,7 @@ export default function GeneratePage() {
                         </div>
                         <h2 className="text-3xl font-bold text-slate-900 mb-4">Portfolio Generated!</h2>
                         <p className="text-slate-500 mb-8 max-w-md mx-auto">
-                            Your professional portfolio has been successfully created. You can now preview it live or customize the design.
+                            Your portfolio is ready as a private draft. Review it in Preview, then click <strong>Publish Live</strong> to share it.
                         </p>
                         {summary && <p className="text-sm text-slate-400 -mt-4 mb-8 max-w-md mx-auto">{summary}</p>}
 

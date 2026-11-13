@@ -5,6 +5,8 @@ export interface LoadedPortfolio {
     id: string;
     subdomain: string;
     isPublic: boolean;
+    isPublished: boolean;
+    userId: string;
     seoTitle: string | null;
     seoDescription: string | null;
     template: string;
@@ -129,6 +131,8 @@ export async function loadPortfolio(where: { userId: string } | { subdomain: str
         id,
         subdomain: portfolio.subdomain,
         isPublic: portfolio.is_public !== false,
+        isPublished: !!portfolio.is_published,
+        userId: portfolio.user_id,
         seoTitle: portfolio.seo_title,
         seoDescription: portfolio.seo_description,
         template: portfolio.template_id || 'modern',

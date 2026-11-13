@@ -1,38 +1,51 @@
 'use client';
 
 import { useState, useEffect } from 'react';
-import { Smartphone, Tablet, Monitor, ExternalLink, Share2, ArrowRight, Check } from 'lucide-react';
+import { Smartphone, Tablet, Monitor, ExternalLink, Share2, ArrowRight, Check, Globe, EyeOff, Copy, X } from 'lucide-react';
 import { Button } from '@/components/ui/button';
 import Link from 'next/link';
 import { cn } from '@/lib/utils';
-import { getUserSubdomain } from '@/actions/user';
+import { getPublishStatus, setPublished, type PublishStatus } from '@/actions/publish';
 
 export default function PreviewPage() {
   const [device, setDevice] = useState<'mobile' | 'tablet' | 'desktop'>('desktop');
   const [copied, setCopied] = useState(false);
   const [loading, setLoading] = useState(true);
-  const [portfolioUrl, setPortfolioUrl] = useState<string | null>(null);
+  const [status, setStatus] = useState<PublishStatus | null>(null);
+  const [publishing, setPublishing] = useState(false);
+  const [publishError, setPublishError] = useState<string | null>(null);
+  const [justPublished, setJustPublished] = useState(false);
+  // Bumped after publish/unpublish so the preview reloads (draft banner appears/disappears)
+  const [frameKey, setFrameKey] = useState(0);
+
+  const portfolioUrl = status ? `/portfolio/${status.subdomain}` : null;
 
   useEffect(() => {
-    async function fetchSubdomain() {
-      try {
-        const subdomain = await getUserSubdomain();
-        if (subdomain) {
-          setPortfolioUrl(`/portfolio/${subdomain}`);
-        } else {
-          // If no subdomain found (e.g. no portfolio created yet), 
-          // we could redirect to generate or show a specific "not found" state.
-          // For now, keep it null so we can show a valid empty state.
-          setPortfolioUrl(null);
-        }
-      } catch (error) {
-        console.error("Failed to fetch subdomain:", error);
-      } finally {
-        setLoading(false);
-      }
-    }
-    fetchSubdomain();
+    getPublishStatus()
+      .then(setStatus)
+      .catch(error => console.error('Failed to load portfolio status:', error))
+      .finally(() => setLoading(false));
   }, []);
+
+  const togglePublish = async () => {
+    if (!status) return;
+    setPublishing(true);
+    setPublishError(null);
+    try {
+      const result = await setPublished(!status.isPublished);
+      if ('error' in result) {
+        setPublishError(result.error);
+      } else {
+        setStatus(result);
+        setJustPublished(result.isPublished);
+        setFrameKey(k => k + 1);
+      }
+    } catch (error) {
+      setPublishError(error instanceof Error ? error.message : 'Failed to update');
+    } finally {
+      setPublishing(false);
+    }
+  };
 
   const handleShare = () => {
     if (!portfolioUrl) return;
@@ -100,11 +113,41 @@ export default function PreviewPage() {
           >
             {copied ? 'Copied!' : 'Share'}
           </Button>
-          <Button size="sm" variant="primary" leftIcon={<ArrowRight className="h-4 w-4" />}>
-            Publish Live
-          </Button>
+          {status?.isPublished ? (
+            <>
+              <span className="hidden sm:inline-flex items-center gap-1.5 rounded-full bg-emerald-50 px-2.5 py-1 text-xs font-medium text-emerald-700 border border-emerald-200">
+                <span className="h-1.5 w-1.5 rounded-full bg-emerald-500" /> Live
+              </span>
+              <Button size="sm" variant="outline" leftIcon={<EyeOff className="h-4 w-4" />} onClick={togglePublish} loading={publishing}>
+                Unpublish
+              </Button>
+            </>
+          ) : (
+            <Button size="sm" variant="primary" leftIcon={<ArrowRight className="h-4 w-4" />} onClick={togglePublish} loading={publishing} disabled={!status}>
+              Publish Live
+            </Button>
+          )}
         </div>
       </div>
+
+      {publishError && (
+        <div className="bg-red-50 border-b border-red-200 px-6 py-2 text-sm text-red-700">{publishError}</div>
+      )}
+      {justPublished && status && (
+        <div className="bg-emerald-50 border-b border-emerald-200 px-6 py-3 flex flex-wrap items-center gap-3 text-sm text-emerald-900">
+          <Globe className="h-4 w-4 shrink-0" />
+          <span className="font-medium">Your portfolio is live!</span>
+          <a href={portfolioUrl!} target="_blank" rel="noopener noreferrer" className="underline break-all">
+            {typeof window !== 'undefined' ? window.location.origin : ''}{portfolioUrl}
+          </a>
+          <Button size="sm" variant="outline" className="h-7" leftIcon={copied ? <Check className="h-3.5 w-3.5" /> : <Copy className="h-3.5 w-3.5" />} onClick={handleShare}>
+            {copied ? 'Copied!' : 'Copy link'}
+          </Button>
+          <button onClick={() => setJustPublished(false)} className="ml-auto text-emerald-700 hover:text-emerald-900" aria-label="Dismiss">
+            <X className="h-4 w-4" />
+          </button>
+        </div>
+      )}
 
       {/* Preview Area */}
       <div className={cn(
@@ -139,6 +182,7 @@ export default function PreviewPage() {
               </div>
             ) : portfolioUrl ? (
               <iframe
+                key={frameKey}
                 src={portfolioUrl}
                 className="w-full h-full bg-white"
                 title="Portfolio Preview"
