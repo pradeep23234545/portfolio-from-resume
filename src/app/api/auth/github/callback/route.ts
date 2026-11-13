@@ -1,6 +1,6 @@
 import { NextRequest, NextResponse } from 'next/server';
 import { createServiceClient } from '@/lib/supabase/service';
-import { signJWT } from '@/lib/auth';
+import { signJWT, verifyJWT } from '@/lib/auth';
 
 export async function GET(req: NextRequest) {
     const code = req.nextUrl.searchParams.get('code');
@@ -62,6 +62,20 @@ export async function GET(req: NextRequest) {
 
         // 4. Upsert User in Database
         const supabase = createServiceClient();
+
+        // Already signed in? Link GitHub to that account instead of switching accounts.
+        const currentToken = req.cookies.get('auth-token')?.value;
+        const current = currentToken ? await verifyJWT(currentToken) : null;
+        if (current?.sub) {
+            const { error: linkError } = await (supabase.from('users') as any).update({
+                github_username: githubUser.login,
+                updated_at: new Date().toISOString(),
+            }).eq('id', current.sub);
+            if (linkError) throw linkError;
+
+            const appOrigin = process.env.NEXT_PUBLIC_APP_URL || req.nextUrl.origin;
+            return NextResponse.redirect(`${appOrigin}/connect`);
+        }
 
         // Check if user exists
         const { data: existingUser } = await supabase.from('users').select('*').eq('email', email).single();

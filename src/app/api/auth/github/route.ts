@@ -5,8 +5,9 @@ export async function GET(req: NextRequest) {
     const origin = process.env.NEXT_PUBLIC_APP_URL || process.env.RENDER_EXTERNAL_URL || 'https://resume-to-portfolio-7zdz.onrender.com';
     const REDIRECT_URI = `${origin}/api/auth/github/callback`;
 
-    if (!GITHUB_CLIENT_ID) {
-        return NextResponse.json({ error: 'GitHub Client ID not configured' }, { status: 500 });
+    if (!GITHUB_CLIENT_ID || /your-|your_/i.test(GITHUB_CLIENT_ID)) {
+        // OAuth isn't set up: send the user back to enter their username instead
+        return NextResponse.redirect(new URL('/connect?github=not-configured', req.url));
     }
 
     const params = new URLSearchParams({

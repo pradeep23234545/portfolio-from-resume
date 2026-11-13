@@ -1,6 +1,14 @@
 import { GoogleGenerativeAI, HarmCategory, HarmBlockThreshold } from '@google/generative-ai';
 
-const genAI = new GoogleGenerativeAI(process.env.GEMINI_API_KEY!);
+const genAI = new GoogleGenerativeAI(process.env.GEMINI_API_KEY || '');
+
+/** Throws a readable error when the Gemini key is missing or still the .env.example placeholder. */
+export function assertGeminiConfigured() {
+    const key = process.env.GEMINI_API_KEY;
+    if (!key || /your-|your_/i.test(key)) {
+        throw new Error('GEMINI_API_KEY is not set. Get a free key at https://aistudio.google.com/app/apikey, add it to .env.local and restart the dev server.');
+    }
+}
 
 const safetySettings = [
     {
@@ -61,7 +69,7 @@ const createRetryingModel = (modelName: string, config: any) => {
     } as any; // Type casting to satisfy basic usage
 };
 
-export const geminiPro = createRetryingModel('gemini-2.0-flash-001', { // 2.0 Flash as "Pro" tier equivalent for now, or just use 2.0-flash-001 if available
+export const geminiPro = createRetryingModel(process.env.GEMINI_MODEL || 'gemini-2.5-flash', {
     safetySettings,
     generationConfig: {
         temperature: 0.7,
@@ -71,7 +79,7 @@ export const geminiPro = createRetryingModel('gemini-2.0-flash-001', { // 2.0 Fl
     },
 });
 
-export const geminiFlash = createRetryingModel('gemini-2.0-flash-lite-001', { // Reverting to 2.0-flash-lite
+export const geminiFlash = createRetryingModel(process.env.GEMINI_FAST_MODEL || 'gemini-2.5-flash-lite', {
     safetySettings,
     generationConfig: {
         temperature: 0.9,

@@ -38,7 +38,7 @@ interface ResumeData {
     };
 }
 
-import { geminiFlash } from '@/lib/ai/gemini';
+import { geminiFlash, assertGeminiConfigured } from '@/lib/ai/gemini';
 
 export async function parseResumePDF(buffer: Buffer): Promise<ResumeData> {
     return new Promise((resolve, reject) => {
@@ -55,8 +55,10 @@ export async function parseResumePDF(buffer: Buffer): Promise<ResumeData> {
                 const text = pdfParser.getRawTextContent();
                 console.log('PDF text extracted, length:', text.length);
 
-                if (!process.env.GEMINI_API_KEY) {
-                    throw new Error('GEMINI_API_KEY is missing in server environment');
+                assertGeminiConfigured();
+
+                if (!text.trim()) {
+                    throw new Error('No text found in this PDF. Scanned/image-only PDFs are not supported — export a text PDF instead.');
                 }
 
                 console.log('Starting AI extraction...');

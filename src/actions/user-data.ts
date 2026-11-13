@@ -141,14 +141,21 @@ export async function getUserConnections() {
     if (!userId) return null;
 
     const supabase = createServiceClient();
-    const { data: rawUser, error } = await supabase.from('users').select('github_username, linkedin_url').eq('id', userId).maybeSingle();
+    const [{ data: rawUser, error }, { data: rawSources }] = await Promise.all([
+        supabase.from('users').select('github_username, linkedin_url').eq('id', userId).maybeSingle(),
+        supabase.from('data_sources').select('source_type').eq('user_id', userId),
+    ]);
     const user = rawUser as any;
 
     if (error || !user) return null;
 
+    const sources = new Set(((rawSources || []) as any[]).map(s => s.source_type));
+
     return {
         github: !!user.github_username,
-        linkedin: !!user.linkedin_url
+        githubUsername: (user.github_username as string | null) || null,
+        resume: sources.has('resume'),
+        linkedin: sources.has('linkedin') || !!user.linkedin_url,
     };
 }
 

@@ -151,3 +151,46 @@ export async function syncGithubRepositories() {
         return { error: error.message };
     }
 }
+
+/**
+ * Links a GitHub account by username (no OAuth needed — only public repos are read).
+ * Verifies the user exists on GitHub, saves it, then syncs repositories.
+ */
+export async function linkGithubUsername(input: string) {
+    const userId = await getUserId();
+    if (!userId) return { error: 'Not authenticated' };
+
+    // Accept "name", "@name" or a full profile URL
+    const username = input.trim().replace(/^@/, '').replace(/^https?:\/\/(www\.)?github\.com\//i, '').split(/[/?#]/)[0];
+    if (!/^[a-z\d](?:[a-z\d-]{0,38})$/i.test(username)) {
+        return { error: 'That does not look like a GitHub username.' };
+    }
+
+    const headers: Record<string, string> = { Accept: 'application/vnd.github.v3+json' };
+    if (process.env.GITHUB_ACCESS_TOKEN) headers.Authorization = `token ${process.env.GITHUB_ACCESS_TOKEN}`;
+
+    const res = await fetch(`https://api.github.com/users/${encodeURIComponent(username)}`, { headers });
+    if (res.status === 404) return { error: `GitHub user "${username}" was not found.` };
+    if (!res.ok) return { error: `GitHub API error: ${res.status} ${res.statusText}` };
+    const profile = await res.json();
+
+    const supabase = createServiceClient() as any;
+    const { error } = await supabase
+        .from('users')
+        .update({
+            github_username: profile.login,
+            updated_at: new Date().toISOString(),
+        })
+        .eq('id', userId);
+
+    if (error) {
+        if (error.code === '23505') return { error: 'This GitHub account is already linked to another user.' };
+        return { error: error.message };
+    }
+
+    // Use the GitHub avatar if the user has none yet
+    await supabase.from('users').update({ avatar_url: profile.avatar_url }).eq('id', userId).is('avatar_url', null);
+
+    const sync = await syncGithubRepositories();
+    return { success: true, username: profile.login as string, count: sync.count ?? 0, syncError: sync.error };
+}
