@@ -5,13 +5,15 @@ export function createServiceClient() {
     const supabaseUrl = process.env.NEXT_PUBLIC_SUPABASE_URL;
     const supabaseServiceKey = process.env.SUPABASE_SERVICE_ROLE_KEY;
 
-    if (!supabaseUrl || !supabaseServiceKey) {
+    const isPlaceholder = (v?: string) => !v || /your-|your_|replace-with/i.test(v);
+
+    if (isPlaceholder(supabaseUrl) || isPlaceholder(supabaseServiceKey)) {
         throw new Error(
             'Supabase is not configured: set NEXT_PUBLIC_SUPABASE_URL and SUPABASE_SERVICE_ROLE_KEY in .env.local (see .env.example), then restart the dev server.'
         );
     }
 
-    return createClient<Database>(supabaseUrl, supabaseServiceKey, {
+    return createClient<Database>(supabaseUrl!, supabaseServiceKey!, {
         auth: {
             autoRefreshToken: false,
             persistSession: false,
