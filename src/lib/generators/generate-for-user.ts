@@ -1,6 +1,7 @@
 import { createServiceClient } from '@/lib/supabase/service';
 import { geminiFlash, assertGeminiConfigured } from '@/lib/ai/gemini';
 import { fetchGithubProfile, saveGithubProfile } from '@/lib/github/profile';
+import { mergeDuplicateProjects } from '@/lib/portfolio/dedupe';
 
 export type GenerateResult =
     | {
@@ -68,6 +69,9 @@ export async function generatePortfolioForUser(userId: string): Promise<Generate
         if (!user) return { success: false, error: 'User not found. Please sign in again.' };
 
         const portfolio = await getOrCreatePortfolio(supabase, userId, user);
+
+        // One card per project: merge resume/LinkedIn copies into their GitHub repo
+        await mergeDuplicateProjects(supabase, portfolio.id);
 
         const [{ data: projects }, { data: experiences }, { data: skills }, { data: education }] = await Promise.all([
             supabase.from('projects').select('id, title, short_description, technologies, repo_url').eq('portfolio_id', portfolio.id).eq('is_visible', true),

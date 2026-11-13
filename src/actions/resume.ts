@@ -3,6 +3,7 @@
 import { createServiceClient } from '@/lib/supabase/service';
 import { verifyJWT } from '@/lib/auth';
 import { cookies } from 'next/headers';
+import { mergeDuplicateProjects } from '@/lib/portfolio/dedupe';
 
 async function getUserId() {
     const cookieStore = await cookies();
@@ -177,6 +178,11 @@ export async function applyResumeData(sourceType: 'resume' | 'linkedin' = 'resum
         if (error) errors.push(`Project "${proj.title}": ${error.message}`);
         else { results.projects++; existing.projects.push({ title: proj.title }); }
     }
+
+    // Same project from GitHub and the PDF (e.g. "restaurant-ecommerce-platform" and
+    // "Restaurant E-commerce Platform") becomes one card with the GitHub link
+    const merged = await mergeDuplicateProjects(supabase, portfolioId);
+    results.projects = Math.max(0, results.projects - merged);
 
     // 7. Profile: fill the LinkedIn URL from the PDF if the user has none yet
     const linkedin = typeof data.contact?.linkedin === 'string' ? data.contact.linkedin.trim() : '';

@@ -2,6 +2,7 @@
 
 import { createServiceClient } from '@/lib/supabase/service';
 import { fetchGithubProfile, saveGithubProfile } from '@/lib/github/profile';
+import { mergeDuplicateProjects, projectKey } from '@/lib/portfolio/dedupe';
 import { verifyJWT } from '@/lib/auth';
 import { cookies } from 'next/headers';
 
@@ -110,44 +111,60 @@ export async function syncGithubRepositories() {
         }
 
         const repos = await res.json();
+        const db = supabase as any;
+
+        // Existing projects, to update in place or attach repos to resume projects of the same name
+        const { data: existingRows } = await db
+            .from('projects')
+            .select('id, title, short_description, technologies, demo_url, source_id, display_order')
+            .eq('portfolio_id', portfolio.id);
+        const existing: any[] = existingRows || [];
+        let nextOrder = Math.max(-1, ...existing.map(p => p.display_order ?? 0)) + 1;
 
         // 4. Upsert Projects
         let count = 0;
         for (const repo of repos) {
-            // Skip forks if we want? Maybe keep them for now.
+            // The "username/username" repo is the GitHub profile README, not a project
+            if (String(repo.name).toLowerCase() === String(user.github_username).toLowerCase()) continue;
 
-            const projectData = {
-                portfolio_id: portfolio.id,
-                title: repo.name,
-                slug: repo.name.toLowerCase().replace(/[^a-z0-9]+/g, '-').replace(/(^-|-$)/g, '') + `-${repo.id}`, // Ensure unique slug with ID
-                short_description: repo.description,
-                repo_url: repo.html_url, // Correct field name
-                demo_url: repo.homepage || null, // Correct field name
-                technologies: [repo.language].filter(Boolean), // Store as JSON array
-                source: 'github',
-                source_id: repo.id.toString(),
-                is_visible: true, // Default to visible
-                updated_at: new Date().toISOString(),
-                display_order: count // Simple ordering
-            };
+            const match =
+                existing.find(p => p.source_id === String(repo.id)) ||
+                existing.find(p => !p.source_id && projectKey(p.title) === projectKey(repo.name));
 
-            // Check if exists by source_id to update or insert
-            const { data: rawExisting } = await supabase
-                .from('projects')
-                .select('id')
-                .eq('portfolio_id', portfolio.id)
-                .eq('source_id', repo.id.toString())
-                .maybeSingle();
-
-            const existing = rawExisting as any;
-
-            if (existing) {
-                await (supabase.from('projects') as any).update(projectData).eq('id', existing.id);
+            if (match) {
+                // Only fill in GitHub facts; never overwrite the title, description,
+                // visibility or order the user (or the resume import) already set
+                const tags = Array.isArray(match.technologies) ? match.technologies : [];
+                const hasLanguage = !repo.language || tags.some((t: string) => String(t).toLowerCase() === String(repo.language).toLowerCase());
+                await db.from('projects').update({
+                    source_id: String(repo.id),
+                    repo_url: repo.html_url,
+                    demo_url: match.demo_url || repo.homepage || null,
+                    short_description: match.short_description || repo.description || null,
+                    technologies: hasLanguage ? tags : [...tags, repo.language],
+                    updated_at: new Date().toISOString(),
+                }).eq('id', match.id);
             } else {
-                await (supabase.from('projects') as any).insert(projectData);
+                await db.from('projects').insert({
+                    portfolio_id: portfolio.id,
+                    title: repo.name,
+                    slug: String(repo.name).toLowerCase().replace(/[^a-z0-9]+/g, '-').replace(/(^-|-$)/g, '') + `-${repo.id}`,
+                    short_description: repo.description,
+                    repo_url: repo.html_url,
+                    demo_url: repo.homepage || null,
+                    technologies: [repo.language].filter(Boolean),
+                    source: 'github',
+                    source_id: String(repo.id),
+                    is_visible: true,
+                    display_order: nextOrder++,
+                    updated_at: new Date().toISOString(),
+                });
             }
             count++;
         }
+
+        // Combine any remaining copies of the same project into one card
+        await mergeDuplicateProjects(db, portfolio.id);
 
         return { success: true, count };
 
