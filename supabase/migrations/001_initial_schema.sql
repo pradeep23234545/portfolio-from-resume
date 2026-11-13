@@ -302,16 +302,24 @@ ALTER TABLE public.user_preferences ENABLE ROW LEVEL SECURITY;
 ALTER TABLE public.github_cache ENABLE ROW LEVEL SECURITY;
 
 -- RLS Policies (users can only access their own data)
+DROP POLICY IF EXISTS "Users can view own data" ON public.users;
 CREATE POLICY "Users can view own data" ON public.users FOR SELECT USING (auth.uid() = id);
+DROP POLICY IF EXISTS "Users can update own data" ON public.users;
 CREATE POLICY "Users can update own data" ON public.users FOR UPDATE USING (auth.uid() = id);
 
+DROP POLICY IF EXISTS "Users can view own portfolios" ON public.portfolios;
 CREATE POLICY "Users can view own portfolios" ON public.portfolios FOR SELECT USING (auth.uid() = user_id);
+DROP POLICY IF EXISTS "Users can insert own portfolios" ON public.portfolios;
 CREATE POLICY "Users can insert own portfolios" ON public.portfolios FOR INSERT WITH CHECK (auth.uid() = user_id);
+DROP POLICY IF EXISTS "Users can update own portfolios" ON public.portfolios;
 CREATE POLICY "Users can update own portfolios" ON public.portfolios FOR UPDATE USING (auth.uid() = user_id);
+DROP POLICY IF EXISTS "Users can delete own portfolios" ON public.portfolios;
 CREATE POLICY "Users can delete own portfolios" ON public.portfolios FOR DELETE USING (auth.uid() = user_id);
 
 -- Public portfolio viewing (for published portfolios)
+DROP POLICY IF EXISTS "Anyone can view published portfolios" ON public.portfolios;
 CREATE POLICY "Anyone can view published portfolios" ON public.portfolios FOR SELECT USING (is_published = TRUE AND is_public = TRUE);
+DROP POLICY IF EXISTS "Anyone can view published projects" ON public.projects;
 CREATE POLICY "Anyone can view published projects" ON public.projects FOR SELECT USING (
   EXISTS (
     SELECT 1 FROM public.portfolios 
@@ -321,6 +329,7 @@ CREATE POLICY "Anyone can view published projects" ON public.projects FOR SELECT
   )
 );
 
+DROP POLICY IF EXISTS "Anyone can view published experiences" ON public.experiences;
 CREATE POLICY "Anyone can view published experiences" ON public.experiences FOR SELECT USING (
   EXISTS (
     SELECT 1 FROM public.portfolios 
@@ -330,6 +339,7 @@ CREATE POLICY "Anyone can view published experiences" ON public.experiences FOR 
   )
 );
 
+DROP POLICY IF EXISTS "Anyone can view published skills" ON public.skills;
 CREATE POLICY "Anyone can view published skills" ON public.skills FOR SELECT USING (
   EXISTS (
     SELECT 1 FROM public.portfolios 
@@ -339,6 +349,7 @@ CREATE POLICY "Anyone can view published skills" ON public.skills FOR SELECT USI
   )
 );
 
+DROP POLICY IF EXISTS "Anyone can view published education" ON public.education;
 CREATE POLICY "Anyone can view published education" ON public.education FOR SELECT USING (
   EXISTS (
     SELECT 1 FROM public.portfolios 
@@ -348,6 +359,7 @@ CREATE POLICY "Anyone can view published education" ON public.education FOR SELE
   )
 );
 
+DROP POLICY IF EXISTS "Anyone can view published content" ON public.portfolio_content;
 CREATE POLICY "Anyone can view published content" ON public.portfolio_content FOR SELECT USING (
   EXISTS (
     SELECT 1 FROM public.portfolios 
@@ -358,47 +370,60 @@ CREATE POLICY "Anyone can view published content" ON public.portfolio_content FO
 );
 
 -- Owner policies for other tables
+DROP POLICY IF EXISTS "Users can manage own projects" ON public.projects;
 CREATE POLICY "Users can manage own projects" ON public.projects FOR ALL USING (
   EXISTS (SELECT 1 FROM public.portfolios WHERE portfolios.id = projects.portfolio_id AND portfolios.user_id = auth.uid())
 );
 
+DROP POLICY IF EXISTS "Users can manage own experiences" ON public.experiences;
 CREATE POLICY "Users can manage own experiences" ON public.experiences FOR ALL USING (
   EXISTS (SELECT 1 FROM public.portfolios WHERE portfolios.id = experiences.portfolio_id AND portfolios.user_id = auth.uid())
 );
 
+DROP POLICY IF EXISTS "Users can manage own skills" ON public.skills;
 CREATE POLICY "Users can manage own skills" ON public.skills FOR ALL USING (
   EXISTS (SELECT 1 FROM public.portfolios WHERE portfolios.id = skills.portfolio_id AND portfolios.user_id = auth.uid())
 );
 
+DROP POLICY IF EXISTS "Users can manage own education" ON public.education;
 CREATE POLICY "Users can manage own education" ON public.education FOR ALL USING (
   EXISTS (SELECT 1 FROM public.portfolios WHERE portfolios.id = education.portfolio_id AND portfolios.user_id = auth.uid())
 );
 
+DROP POLICY IF EXISTS "Users can manage own certifications" ON public.certifications;
 CREATE POLICY "Users can manage own certifications" ON public.certifications FOR ALL USING (
   EXISTS (SELECT 1 FROM public.portfolios WHERE portfolios.id = certifications.portfolio_id AND portfolios.user_id = auth.uid())
 );
 
+DROP POLICY IF EXISTS "Users can manage own content" ON public.portfolio_content;
 CREATE POLICY "Users can manage own content" ON public.portfolio_content FOR ALL USING (
   EXISTS (SELECT 1 FROM public.portfolios WHERE portfolios.id = portfolio_content.portfolio_id AND portfolios.user_id = auth.uid())
 );
 
+DROP POLICY IF EXISTS "Users can manage own data sources" ON public.data_sources;
 CREATE POLICY "Users can manage own data sources" ON public.data_sources FOR ALL USING (auth.uid() = user_id);
+DROP POLICY IF EXISTS "Users can view own generation jobs" ON public.generation_jobs;
 CREATE POLICY "Users can view own generation jobs" ON public.generation_jobs FOR SELECT USING (
   EXISTS (SELECT 1 FROM public.portfolios WHERE portfolios.id = generation_jobs.portfolio_id AND portfolios.user_id = auth.uid())
 );
 
+DROP POLICY IF EXISTS "Users can view own ATS scores" ON public.ats_scores;
 CREATE POLICY "Users can view own ATS scores" ON public.ats_scores FOR SELECT USING (
   EXISTS (SELECT 1 FROM public.portfolios WHERE portfolios.id = ats_scores.portfolio_id AND portfolios.user_id = auth.uid())
 );
 
+DROP POLICY IF EXISTS "Users can view own coaching" ON public.coaching_sessions;
 CREATE POLICY "Users can view own coaching" ON public.coaching_sessions FOR ALL USING (
   EXISTS (SELECT 1 FROM public.portfolios WHERE portfolios.id = coaching_sessions.portfolio_id AND portfolios.user_id = auth.uid())
 );
 
+DROP POLICY IF EXISTS "Users can manage own preferences" ON public.user_preferences;
 CREATE POLICY "Users can manage own preferences" ON public.user_preferences FOR ALL USING (auth.uid() = user_id);
+DROP POLICY IF EXISTS "Users can manage own cache" ON public.github_cache;
 CREATE POLICY "Users can manage own cache" ON public.github_cache FOR ALL USING (auth.uid() = user_id);
 
 -- Public analytics insertion (for tracking)
+DROP POLICY IF EXISTS "Anyone can insert analytics" ON public.portfolio_analytics;
 CREATE POLICY "Anyone can insert analytics" ON public.portfolio_analytics FOR INSERT WITH CHECK (TRUE);
 
 -- Functions and Triggers
