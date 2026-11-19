@@ -1,7 +1,7 @@
 'use client';
 
 import { useState, useEffect } from 'react';
-import { Smartphone, Tablet, Monitor, ExternalLink, Share2, ArrowRight, Check, Globe, EyeOff, Copy, X } from 'lucide-react';
+import { Smartphone, Tablet, Monitor, ExternalLink, Share2, ArrowRight, Check, Globe, EyeOff, Copy, X, Download } from 'lucide-react';
 import { Button } from '@/components/ui/button';
 import Link from 'next/link';
 import { cn } from '@/lib/utils';
@@ -46,6 +46,32 @@ export default function PreviewPage() {
       setPublishError(error instanceof Error ? error.message : 'Failed to update');
     } finally {
       setPublishing(false);
+    }
+  };
+
+  const [downloading, setDownloading] = useState(false);
+  /** Saves the portfolio as one self-contained index.html (no link back to this app) */
+  const handleDownload = async () => {
+    setDownloading(true);
+    try {
+      const res = await fetch('/api/export');
+      if (!res.ok) {
+        const body = await res.json().catch(() => ({}));
+        throw new Error(body.error || 'Download failed');
+      }
+      const url = URL.createObjectURL(await res.blob());
+      const a = document.createElement('a');
+      a.href = url;
+      a.download = 'index.html';
+      document.body.appendChild(a);
+      a.click();
+      a.remove();
+      URL.revokeObjectURL(url);
+      refreshNotifications();
+    } catch (err) {
+      alert(err instanceof Error ? err.message : 'Download failed');
+    } finally {
+      setDownloading(false);
     }
   };
 
@@ -114,6 +140,17 @@ export default function PreviewPage() {
             disabled={!portfolioUrl}
           >
             {copied ? 'Copied!' : 'Share'}
+          </Button>
+          <Button
+            variant="outline"
+            size="sm"
+            leftIcon={<Download className="h-4 w-4" />}
+            onClick={handleDownload}
+            loading={downloading}
+            disabled={!portfolioUrl}
+            title="Download your portfolio as a standalone index.html to host anywhere (Netlify, GitHub Pages, Vercel)"
+          >
+            Download website
           </Button>
           {status?.isPublished ? (
             <>

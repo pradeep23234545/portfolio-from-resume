@@ -2,7 +2,7 @@
 import { ExternalLink, MapPin, Github, GraduationCap } from 'lucide-react';
 import { Badge } from '@/components/ui/badge';
 import { Button } from '@/components/ui/button';
-import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
+import { Card, CardContent, CardHeader, CardTitle } from './static-card';
 import { PortfolioData } from '@/lib/data/mockData';
 import { ProfilePhoto, contactLinks, linkProps, projectHref } from './shared';
 
