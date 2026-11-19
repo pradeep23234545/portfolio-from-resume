@@ -5,17 +5,8 @@ import type { Metadata } from 'next';
 import { verifyJWT } from '@/lib/auth';
 import { loadPortfolio, onlyVisible } from '@/lib/portfolio/load';
 import { ModernTemplate } from '@/components/templates/ModernTemplate';
-import { CreativeTemplate } from '@/components/templates/CreativeTemplate';
-import { MinimalTemplate } from '@/components/templates/MinimalTemplate';
+import { PortfolioLayout } from '@/components/templates/registry';
 import { ViewTracker } from '@/components/templates/ViewTracker';
-
-const TEMPLATES = {
-    modern: ModernTemplate,
-    creative: CreativeTemplate,
-    minimal: MinimalTemplate,
-    professional: ModernTemplate,
-    startup: CreativeTemplate,
-};
 
 async function viewerId() {
     const token = (await cookies()).get('auth-token')?.value;
@@ -52,7 +43,6 @@ export default async function PortfolioPage({ params }: { params: Promise<{ subd
     const isOwner = (await viewerId()) === portfolio.userId;
     if (!portfolio.isPublished && !isOwner) return notFound();
 
-    const Template = TEMPLATES[portfolio.template as keyof typeof TEMPLATES] || ModernTemplate;
     return (
         <>
             {!portfolio.isPublished && (
@@ -61,7 +51,7 @@ export default async function PortfolioPage({ params }: { params: Promise<{ subd
                     <Link href="/preview" target="_top" className="font-semibold underline">Publish it</Link> to share it.
                 </div>
             )}
-            <Template data={onlyVisible(portfolio.data)} theme={portfolio.theme} font={portfolio.font} />
+            <PortfolioLayout template={portfolio.template} data={onlyVisible(portfolio.data)} theme={portfolio.theme} font={portfolio.font} />
             {/* Count visitors only: not the owner, not drafts */}
             {portfolio.isPublished && !isOwner && <ViewTracker portfolioId={portfolio.id} />}
         </>

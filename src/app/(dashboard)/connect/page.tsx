@@ -8,10 +8,11 @@ import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
 import { Badge } from '@/components/ui/badge';
 import { getUserConnections } from '@/actions/user-data';
-import { applyResumeData } from '@/actions/resume';
 import { linkGithubUsername, syncGithubRepositories } from '@/actions/github';
+import { ALL_SOURCES, SOURCE_LABELS, type DataSource as Source } from '@/lib/portfolio/sources';
+import { refreshNotifications } from '@/components/dashboard/NotificationBell';
 
-type Source = 'github' | 'resume' | 'linkedin';
+const SELECTION_KEY = 'portfolio-sources';
 type Status = { kind: 'success' | 'error'; text: string } | null;
 
 function StatusMessage({ status }: { status: Status }) {
@@ -25,14 +26,33 @@ function StatusMessage({ status }: { status: Status }) {
     );
 }
 
-function summarize(results: { experiences: number; education: number; skills: number; projects: number }) {
+/** "Use in portfolio" switch shown on a connected source card */
+function UseSourceToggle({ checked, onChange }: { checked: boolean; onChange: (value: boolean) => void }) {
+    return (
+        <label className="mt-3 flex cursor-pointer items-center gap-2 text-sm font-medium text-slate-700 dark:text-slate-300">
+            <input
+                type="checkbox"
+                className="h-4 w-4 rounded border-slate-300 accent-indigo-600"
+                checked={checked}
+                onChange={(e) => onChange(e.target.checked)}
+            />
+            Use in my portfolio
+        </label>
+    );
+}
+
+/** "Read Jane Doe: 2 experiences, 1 education, 8 skills. Click Generate to build your portfolio." */
+function summarize(data: { name?: string; experiences?: unknown[]; education?: unknown[]; skills?: unknown[]; projects?: unknown[] } | null) {
+    const count = (v: unknown) => (Array.isArray(v) ? v.length : 0);
+    const n = { experiences: count(data?.experiences), education: count(data?.education), skills: count(data?.skills), projects: count(data?.projects) };
     const parts = [
-        results.experiences && `${results.experiences} experience${results.experiences > 1 ? 's' : ''}`,
-        results.education && `${results.education} education`,
-        results.skills && `${results.skills} skill${results.skills > 1 ? 's' : ''}`,
-        results.projects && `${results.projects} project${results.projects > 1 ? 's' : ''}`,
+        n.experiences && `${n.experiences} experience${n.experiences > 1 ? 's' : ''}`,
+        n.education && `${n.education} education`,
+        n.skills && `${n.skills} skill${n.skills > 1 ? 's' : ''}`,
+        n.projects && `${n.projects} project${n.projects > 1 ? 's' : ''}`,
     ].filter(Boolean);
-    return parts.length ? `Added ${parts.join(', ')}.` : 'Nothing new to add — your portfolio already has these entries.';
+    const who = data?.name ? `Read ${data.name}` : 'Read the PDF';
+    return `${who}${parts.length ? `: ${parts.join(', ')}` : ''}. Click Generate to build your portfolio from it.`;
 }
 
 export default function ConnectPage() {
@@ -42,6 +62,9 @@ export default function ConnectPage() {
     const [linkedinUploaded, setLinkedinUploaded] = useState(false);
     const [busy, setBusy] = useState<Source | null>(null);
     const [status, setStatus] = useState<Record<Source, Status>>({ github: null, resume: null, linkedin: null });
+    const [editingGithub, setEditingGithub] = useState(false);
+    // Sources the user wants the portfolio built from; null until connections load
+    const [selected, setSelected] = useState<Set<Source> | null>(null);
 
     const resumeInput = useRef<HTMLInputElement>(null);
     const linkedinInput = useRef<HTMLInputElement>(null);
@@ -49,12 +72,40 @@ export default function ConnectPage() {
     const setSourceStatus = (source: Source, value: Status) =>
         setStatus(prev => ({ ...prev, [source]: value }));
 
+    const storeSelection = (next: Set<Source>) => {
+        try { localStorage.setItem(SELECTION_KEY, JSON.stringify([...next])); } catch { /* storage unavailable */ }
+    };
+    const toggleSource = (source: Source, on: boolean) => {
+        const next = new Set(selected ?? []);
+        if (on) next.add(source); else next.delete(source);
+        setSelected(next);
+        storeSelection(next);
+    };
+    /** A newly connected source is used by default */
+    const markConnected = (source: Source) => {
+        setSelected(prev => {
+            const next = new Set(prev ?? []);
+            next.add(source);
+            storeSelection(next);
+            return next;
+        });
+    };
+
     useEffect(() => {
         getUserConnections().then(connections => {
             if (!connections) return;
             setGithubUsername(connections.githubUsername);
             setResumeUploaded(connections.resume);
             setLinkedinUploaded(connections.linkedin);
+
+            // Restore the last choice; default to every connected source
+            let saved: string[] | null = null;
+            try {
+                const parsed = JSON.parse(localStorage.getItem(SELECTION_KEY) || 'null');
+                if (Array.isArray(parsed)) saved = parsed;
+            } catch { /* storage unavailable */ }
+            const connected = ALL_SOURCES.filter(s => connections[s]);
+            setSelected(new Set(saved ? connected.filter(s => saved.includes(s)) : connected));
         });
 
         if (new URLSearchParams(window.location.search).get('github') === 'not-configured') {
@@ -76,6 +127,10 @@ export default function ConnectPage() {
                 setSourceStatus('github', { kind: 'error', text: res.error });
             } else {
                 setGithubUsername(res.username ?? githubInput);
+                setGithubInput('');
+                setEditingGithub(false);
+                markConnected('github');
+                refreshNotifications();
                 setSourceStatus('github', res.syncError
                     ? { kind: 'error', text: `Linked, but syncing repos failed: ${res.syncError}` }
                     : { kind: 'success', text: `Imported ${res.count} repositories.` });
@@ -90,7 +145,7 @@ export default function ConnectPage() {
     const handleResync = async () => {
         setBusy('github');
         setSourceStatus('github', null);
-        const res = await syncGithubRepositories();
+        const res = await syncGithubRepositories({ notify: true });
         setSourceStatus('github', res.error
             ? { kind: 'error', text: res.error }
             : { kind: 'success', text: `Synced ${res.count} repositories.` });
@@ -128,16 +183,15 @@ export default function ConnectPage() {
                 throw new Error(errorData.error || `Upload failed with status ${response.status}`);
             }
 
+            refreshNotifications();
             if (type === 'resume') setResumeUploaded(true);
             else setLinkedinUploaded(true);
+            markConnected(type);
 
-            const result = await applyResumeData(type);
-            if (result.error) {
-                setSourceStatus(type, { kind: 'error', text: `Uploaded, but could not add the data: ${result.error}` });
-            } else if (result.results) {
-                const warn = result.warnings?.length ? ` Some entries were skipped: ${result.warnings[0]}` : '';
-                setSourceStatus(type, { kind: warn ? 'error' : 'success', text: summarize(result.results) + warn });
-            }
+            // The upload is only saved here; Generate builds the portfolio from it, so a
+            // new file never mixes with content from an earlier upload
+            const { data } = await response.json().catch(() => ({ data: null }));
+            setSourceStatus(type, { kind: 'success', text: summarize(data) });
         } catch (error) {
             setSourceStatus(type, { kind: 'error', text: error instanceof Error ? error.message : 'Upload failed' });
         } finally {
@@ -146,7 +200,10 @@ export default function ConnectPage() {
     };
 
     const githubConnected = !!githubUsername;
+    const connectedMap: Record<Source, boolean> = { github: githubConnected, resume: resumeUploaded, linkedin: linkedinUploaded };
     const anyConnected = githubConnected || resumeUploaded || linkedinUploaded;
+    const chosen = ALL_SOURCES.filter(s => connectedMap[s] && selected?.has(s));
+    const isChosen = (s: Source) => !!selected?.has(s);
     const doneCard = 'border-emerald-500/50 bg-emerald-50/10';
     const idleCard = 'border-slate-200 hover:border-indigo-200';
 
@@ -188,7 +245,8 @@ export default function ConnectPage() {
                         </ul>
                     </CardContent>
                     <CardFooter className="flex-col items-stretch">
-                        {githubConnected ? (
+                        {githubConnected && !editingGithub ? (
+                            <>
                             <Button
                                 variant="outline"
                                 className="w-full border-emerald-200 text-emerald-700 hover:bg-emerald-50 hover:text-emerald-800"
@@ -198,7 +256,21 @@ export default function ConnectPage() {
                             >
                                 Sync repositories again
                             </Button>
+                            <button
+                                type="button"
+                                className="mt-2 text-center text-xs text-slate-500 underline-offset-2 hover:underline"
+                                onClick={() => { setEditingGithub(true); setSourceStatus('github', null); }}
+                            >
+                                Use a different GitHub account
+                            </button>
+                            </>
                         ) : (
+                            <>
+                            {editingGithub && (
+                                <p className="mb-2 text-xs text-slate-500">
+                                    Repositories from @{githubUsername} will be replaced by the new account&apos;s.
+                                </p>
+                            )}
                             <form onSubmit={handleLinkGithub} className="flex w-full gap-2">
                                 <div className="flex-1">
                                     <Input
@@ -210,12 +282,19 @@ export default function ConnectPage() {
                                     />
                                 </div>
                                 <Button type="submit" variant="primary" loading={busy === 'github'} disabled={!githubInput.trim()}>
-                                    Connect
+                                    {editingGithub ? 'Switch' : 'Fetch'}
                                 </Button>
+                                {editingGithub && (
+                                    <Button type="button" variant="ghost" onClick={() => setEditingGithub(false)} disabled={busy === 'github'}>
+                                        Cancel
+                                    </Button>
+                                )}
                             </form>
+                            </>
                         )}
                         <StatusMessage status={status.github} />
-                        {!githubConnected && (
+                        {githubConnected && <UseSourceToggle checked={isChosen('github')} onChange={(v) => toggleSource('github', v)} />}
+                        {!githubConnected && !editingGithub && (
                             <a href="/api/auth/github" className="mt-3 text-center text-xs text-slate-500 underline-offset-2 hover:underline">
                                 or sign in with GitHub
                             </a>
@@ -258,6 +337,7 @@ export default function ConnectPage() {
                             {resumeUploaded ? 'Upload a new resume' : 'Upload PDF'}
                         </Button>
                         <StatusMessage status={status.resume} />
+                        {resumeUploaded && <UseSourceToggle checked={isChosen('resume')} onChange={(v) => toggleSource('resume', v)} />}
                     </CardFooter>
                 </Card>
 
@@ -296,6 +376,7 @@ export default function ConnectPage() {
                             {linkedinUploaded ? 'Upload a new LinkedIn PDF' : 'Upload PDF Export'}
                         </Button>
                         <StatusMessage status={status.linkedin} />
+                        {linkedinUploaded && <UseSourceToggle checked={isChosen('linkedin')} onChange={(v) => toggleSource('linkedin', v)} />}
                     </CardFooter>
                 </Card>
 
@@ -334,18 +415,28 @@ export default function ConnectPage() {
                         <CardContent className="p-6 flex flex-col md:flex-row items-center justify-between gap-6 relative z-10">
                             <div>
                                 <h3 className="text-lg font-bold flex items-center gap-2">
-                                    <CheckCircle2 className="h-5 w-5 text-emerald-400" />
-                                    Data Sources Connected
+                                    {chosen.length
+                                        ? <CheckCircle2 className="h-5 w-5 text-emerald-400" />
+                                        : <AlertCircle className="h-5 w-5 text-amber-400" />}
+                                    {chosen.length ? 'Ready to generate' : 'No source selected'}
                                 </h3>
                                 <p className="text-slate-400 mt-1">
-                                    You&apos;re ready to generate your AI portfolio!
+                                    {chosen.length
+                                        ? <>Your portfolio will be built from <strong className="text-white">{chosen.map(s => SOURCE_LABELS[s]).join(' + ')}</strong> only.</>
+                                        : 'Tick “Use in my portfolio” on at least one connected source.'}
                                 </p>
                             </div>
-                            <Link href="/generate">
-                                <Button size="lg" variant="primary" rightIcon={<ArrowRight className="h-5 w-5" />} className="shadow-lg shadow-indigo-500/25">
+                            {chosen.length ? (
+                                <Link href={`/generate?sources=${chosen.join(',')}`}>
+                                    <Button size="lg" variant="primary" rightIcon={<ArrowRight className="h-5 w-5" />} className="shadow-lg shadow-indigo-500/25">
+                                        Generate Portfolio Now
+                                    </Button>
+                                </Link>
+                            ) : (
+                                <Button size="lg" variant="primary" disabled rightIcon={<ArrowRight className="h-5 w-5" />}>
                                     Generate Portfolio Now
                                 </Button>
-                            </Link>
+                            )}
                         </CardContent>
                     </Card>
                 </div>

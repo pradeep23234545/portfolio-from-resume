@@ -1,40 +1,42 @@
 import { NextRequest, NextResponse } from 'next/server';
 import { verifyJWT } from '@/lib/auth';
 
-const protectedRoutes = ['/dashboard', '/onboarding'];
+// Every page of the app needs an account; public portfolios (/portfolio/...) do not
+const protectedRoutes = [
+    '/dashboard', '/onboarding', '/connect', '/generate', '/projects', '/experience', '/skills',
+    '/customize', '/preview', '/templates', '/settings', '/help',
+];
 const authRoutes = ['/login', '/signup'];
+
+const matches = (pathname: string, routes: string[]) =>
+    routes.some(route => pathname === route || pathname.startsWith(`${route}/`));
 
 export async function middleware(request: NextRequest) {
     const { pathname } = request.nextUrl;
     const token = request.cookies.get('auth-token')?.value;
+    const isValidToken = token ? !!(await verifyJWT(token)) : false;
 
-    let isValidToken = false;
-    if (token) {
-        const payload = await verifyJWT(token);
-        isValidToken = !!payload;
+    // The app starts at sign-in: signed-in users go to their dashboard, everyone else to login
+    if (pathname === '/') {
+        return NextResponse.redirect(new URL(isValidToken ? '/dashboard' : '/login', request.url));
     }
 
-    // specific logic for protected routes
-    if (protectedRoutes.some(route => pathname.startsWith(route))) {
-        if (!isValidToken) {
-            const loginUrl = new URL('/login', request.url);
-            loginUrl.searchParams.set('redirect', pathname);
-            return NextResponse.redirect(loginUrl);
-        }
+    if (matches(pathname, protectedRoutes) && !isValidToken) {
+        const loginUrl = new URL('/login', request.url);
+        loginUrl.searchParams.set('redirect', pathname);
+        return NextResponse.redirect(loginUrl);
     }
 
-    // specific logic for auth routes (login/signup)
-    if (authRoutes.some(route => pathname.startsWith(route))) {
-        if (isValidToken) {
-            return NextResponse.redirect(new URL('/dashboard', request.url));
-        }
+    if (matches(pathname, authRoutes) && isValidToken) {
+        return NextResponse.redirect(new URL('/dashboard', request.url));
     }
 
     return NextResponse.next();
 }
 
 export const config = {
+    // Pages only: API routes and static files check auth themselves / need none
     matcher: [
-        '/((?!_next/static|_next/image|favicon.ico|.*\\.(?:svg|png|jpg|jpeg|gif|webp)$).*)',
+        '/((?!api|_next/static|_next/image|favicon.ico|.*\\.(?:svg|png|jpg|jpeg|gif|webp|ico)$).*)',
     ],
 };

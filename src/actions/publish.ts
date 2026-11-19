@@ -4,6 +4,7 @@ import { cookies } from 'next/headers';
 import { revalidatePath } from 'next/cache';
 import { verifyJWT } from '@/lib/auth';
 import { createServiceClient } from '@/lib/supabase/service';
+import { notify } from '@/lib/notifications';
 
 export interface PublishStatus {
     subdomain: string;
@@ -54,5 +55,11 @@ export async function setPublished(publish: boolean): Promise<PublishStatus | { 
     if (!data) return { error: 'No portfolio yet. Generate it first.' };
 
     revalidatePath(`/portfolio/${data.subdomain}`);
+    await notify(supabase, userId, {
+        kind: 'publish',
+        title: publish ? 'Portfolio published' : 'Portfolio unpublished',
+        body: publish ? `It is live at /portfolio/${data.subdomain}.` : 'It is hidden from visitors again.',
+        href: '/preview',
+    });
     return { subdomain: data.subdomain, isPublished: !!data.is_published, publishedAt: data.published_at };
 }

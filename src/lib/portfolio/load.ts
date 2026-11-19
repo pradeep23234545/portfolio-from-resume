@@ -64,11 +64,14 @@ export async function loadPortfolio(where: { userId: string } | { subdomain: str
     const skillsIn = (...cats: string[]) =>
         visibleSkills.filter((s: any) => cats.includes(s.category)).map((s: any) => s.skill_name as string);
 
-    const githubUser: string = user.github_username || '';
-    const email: string = user.email || '';
+    // Portfolios generated without GitHub don't show the GitHub link or photo
+    const builtWithoutGithub = Array.isArray(meta.sources) && !meta.sources.includes('github');
+    const githubUser: string = builtWithoutGithub ? '' : user.github_username || '';
+    // Generated portfolios carry the name/email found in the sources; older ones use the account's
+    const email: string = (typeof meta.contact_email === 'string' && meta.contact_email.trim()) || user.email || '';
 
     const data: PortfolioData = {
-        name: user.full_name || 'Portfolio',
+        name: (typeof meta.display_name === 'string' && meta.display_name.trim()) || user.full_name || 'Portfolio',
         email,
         title: meta.hero_tagline || experiences?.[0]?.role || 'Developer',
         bio: about?.content || portfolio.seo_description || '',

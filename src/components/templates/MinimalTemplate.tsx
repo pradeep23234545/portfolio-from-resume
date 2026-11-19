@@ -33,7 +33,7 @@ export const MinimalTemplate = ({ data, theme, font }: TemplateProps) => {
                 {/* Header */}
                 <header className="space-y-6">
                     <ProfilePhoto data={data} className="w-20 h-20 grayscale-[30%]" fallbackClassName="bg-black text-white" />
-                    <h1 className="text-5xl md:text-7xl font-bold tracking-tight">
+                    <h1 className="text-4xl sm:text-5xl md:text-7xl font-bold tracking-tight break-words">
                         {data.name}.
                     </h1>
                     <p className={`text-xl md:text-2xl ${themeColor}`}>

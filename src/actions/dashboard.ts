@@ -1,189 +1,154 @@
 'use server';
 
+import { cookies } from 'next/headers';
 import { createServiceClient } from '@/lib/supabase/service';
 import { verifyJWT } from '@/lib/auth';
-import { cookies } from 'next/headers';
+import { getNotificationsFor, type AppNotification } from '@/lib/notifications';
+import { LAYOUTS } from '@/lib/portfolio/layouts';
 
 async function getUserId() {
-    const cookieStore = await cookies();
-    const token = cookieStore.get('auth-token')?.value;
-    if (!token) return null;
-    const payload = await verifyJWT(token);
-    return payload?.sub as string | undefined;
+    const token = (await cookies()).get('auth-token')?.value;
+    const payload = token ? await verifyJWT(token) : null;
+    return (payload?.sub as string | undefined) || null;
 }
 
-export async function getDashboardOverview() {
+export interface SourceStatus {
+    type: 'github' | 'resume' | 'linkedin';
+    label: string;
+    connected: boolean;
+    identifier: string | null;
+    lastSyncedAt: string | null;
+    status: string | null;
+}
+
+export interface DashboardOverview {
+    userName: string;
+    portfolio: {
+        exists: boolean;
+        subdomain: string | null;
+        layout: string;
+        theme: string;
+        isPublished: boolean;
+        publishedAt: string | null;
+        lastGeneratedAt: string | null;
+        updatedAt: string | null;
+        seoDescriptionLength: number;
+    };
+    counts: {
+        projects: number; visibleProjects: number; withRepo: number;
+        experiences: number; education: number; skills: number;
+    };
+    skillCategories: { label: string; count: number }[];
+    topTech: { name: string; count: number }[];
+    sources: SourceStatus[];
+    health: { score: number; checks: { label: string; completed: boolean; hint: string; href: string }[] };
+    activity: AppNotification[];
+}
+
+const tags = (v: unknown): string[] => {
+    if (Array.isArray(v)) return v.map(String);
+    if (typeof v === 'string') { try { const p = JSON.parse(v); return Array.isArray(p) ? p.map(String) : []; } catch { return []; } }
+    return [];
+};
+
+export async function getDashboardOverview(): Promise<DashboardOverview | null> {
     const userId = await getUserId();
     if (!userId) return null;
+    const supabase = createServiceClient() as any;
 
-    const supabase = createServiceClient();
+    const [{ data: user }, { data: portfolio }, { data: sourceRows }, activity] = await Promise.all([
+        supabase.from('users').select('full_name, email, github_username').eq('id', userId).maybeSingle(),
+        supabase.from('portfolios').select('*').eq('user_id', userId).maybeSingle(),
+        supabase.from('data_sources').select('source_type, source_identifier, last_synced_at, sync_status').eq('user_id', userId),
+        getNotificationsFor(supabase, userId),
+    ]);
 
-    // 1. Fetch Basic Info (User + Portfolio)
-    const { data: rawUser } = await supabase.from('users').select('*').eq('id', userId).single();
-    const { data: rawPortfolio } = await supabase.from('portfolios').select('*').eq('user_id', userId).single();
+    const pid = portfolio?.id;
+    const empty = { data: [] as any[] };
+    const [{ data: projects }, { data: experiences }, { data: education }, { data: skills }, { data: about }] = pid
+        ? await Promise.all([
+            supabase.from('projects').select('technologies, is_visible, repo_url').eq('portfolio_id', pid),
+            supabase.from('experiences').select('id').eq('portfolio_id', pid),
+            supabase.from('education').select('id').eq('portfolio_id', pid),
+            supabase.from('skills').select('category, is_visible').eq('portfolio_id', pid),
+            supabase.from('portfolio_content').select('content').eq('portfolio_id', pid).eq('section_type', 'about').limit(1),
+        ])
+        : [empty, empty, empty, empty, empty];
 
-    if (!rawPortfolio) return null;
-
-    const user = rawUser as any;
-    const portfolio = rawPortfolio as any;
-    const portfolioId = portfolio.id;
-
-    // 2. Fetch Counts for Health Score
-    // Casting to any to avoid count property type issues if definitions are strict
-    const { count: projectCount } = await supabase.from('projects').select('*', { count: 'exact', head: true }).eq('portfolio_id', portfolioId);
-    const { count: experienceCount } = await supabase.from('experiences').select('*', { count: 'exact', head: true }).eq('portfolio_id', portfolioId);
-    const { count: skillCount } = await supabase.from('skills').select('*', { count: 'exact', head: true }).eq('portfolio_id', portfolioId);
-
-    // Calculate Health Score
-    let score = 0;
-    // Base: 20
-    score += 20;
-    // Profile info (Name, Title/Bio in SEO fields): 20
-    if (user?.full_name && portfolio.seo_title && portfolio.seo_description) score += 20;
-    // Projects (> 0): 20
-    if ((projectCount || 0) > 0) score += 20;
-    // Experience (> 0): 10
-    if ((experienceCount || 0) > 0) score += 10;
-    // Skills (> 0): 10
-    if ((skillCount || 0) > 0) score += 10;
-    // Custom domain or specific subdomain check? 
-    // Published? 10
-    if (portfolio.is_published) score += 10;
-    // Dynamic Health Check Items
-    const healthChecks = [
-        {
-            label: 'Profile Information',
-            completed: !!(user?.full_name && portfolio.seo_title),
-            type: 'profile'
-        },
-        {
-            label: `${projectCount || 0} Projects added`,
-            completed: (projectCount || 0) > 0,
-            type: 'projects'
-        },
-        {
-            label: 'Experience section',
-            completed: (experienceCount || 0) > 0,
-            type: 'experience'
-        },
-        {
-            label: 'Portfolio Published',
-            completed: !!portfolio.is_published,
-            type: 'publish'
-        }
-    ];
-
-
-    // 3. functional Recent Activity
-    // We'll combine recent projects and recent analytics events
-    const { data: rawRecentProjects } = await supabase
-        .from('projects')
-        .select('title, created_at, updated_at')
-        .eq('portfolio_id', portfolioId)
-        .order('updated_at', { ascending: false })
-        .limit(3);
-
-    const { data: rawRecentAnalytics } = await supabase
-        .from('portfolio_analytics')
-        .select('event_type, created_at, country, city')
-        .eq('portfolio_id', portfolioId)
-        .order('created_at', { ascending: false })
-        .limit(5);
-
-    const activities: any[] = [];
-
-    const recentProjects = rawRecentProjects as any[] | null;
-    const recentAnalytics = rawRecentAnalytics as any[] | null;
-
-    // Map projects to activity
-    if (recentProjects) {
-        recentProjects.forEach((p: any) => {
-            activities.push({
-                text: `Project '${p.title}' updated`,
-                time: new Date(p.updated_at).toLocaleDateString(), // Simplification
-                timestamp: new Date(p.updated_at).getTime(),
-                type: 'update'
-            });
-        });
-    }
-
-    // Map analytics to activity
-    if (recentAnalytics) {
-        recentAnalytics.forEach((a: any) => {
-            let text = 'New visitor';
-            if (a.event_type === 'view') text = `Portfolio view from ${a.city || 'Unknown'}, ${a.country || ''}`;
-            if (a.event_type === 'project_click') text = 'Project viewed';
-
-            activities.push({
-                text: text,
-                time: new Date(a.created_at).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' }),
-                timestamp: new Date(a.created_at).getTime(),
-                type: 'visitor'
-            });
-        });
-    }
-
-    // Sort combined activities
-    activities.sort((a, b) => b.timestamp - a.timestamp);
-    const recentActivity = activities.slice(0, 5); // Top 5
-
-    return {
-        health: {
-            score,
-            checks: healthChecks
-        },
-        recentActivity,
-        notifications: await getNotifications(portfolio)
+    const p = projects || [], sk = (skills || []).filter((s: any) => s.is_visible !== false);
+    const counts = {
+        projects: p.length,
+        visibleProjects: p.filter((x: any) => x.is_visible !== false).length,
+        withRepo: p.filter((x: any) => x.repo_url).length,
+        experiences: (experiences || []).length,
+        education: (education || []).length,
+        skills: sk.length,
     };
-}
 
-export async function getNotifications(portfolio?: any) {
-    if (!portfolio) {
-        const userId = await getUserId();
-        if (!userId) return [];
-        const supabase = createServiceClient();
-        const { data } = await supabase.from('portfolios').select('*').eq('user_id', userId).single();
-        portfolio = data;
+    // Technology frequency across projects
+    const freq = new Map<string, { name: string; count: number }>();
+    for (const project of p) {
+        for (const t of tags(project.technologies)) {
+            const key = t.trim().toLowerCase();
+            if (!key) continue;
+            const entry = freq.get(key) || { name: t.trim(), count: 0 };
+            entry.count++;
+            freq.set(key, entry);
+        }
     }
+    const topTech = [...freq.values()].sort((a, b) => b.count - a.count || a.name.localeCompare(b.name)).slice(0, 8);
 
-    if (!portfolio) return [];
+    const skillCategories = ['Frontend', 'Backend', 'Tools'].map(label => ({
+        label,
+        count: sk.filter((s: any) => (label === 'Tools' ? !['Frontend', 'Backend'].includes(s.category) : s.category === label)).length,
+    }));
 
-    const supabase = createServiceClient();
+    const rows: any[] = sourceRows || [];
+    const source = (type: SourceStatus['type'], label: string): SourceStatus => {
+        const r = rows.find(x => x.source_type === type);
+        const connected = type === 'github' ? !!user?.github_username : !!r;
+        return {
+            type, label, connected,
+            identifier: type === 'github' ? (user?.github_username ? `@${user.github_username}` : null) : r?.source_identifier || null,
+            lastSyncedAt: r?.last_synced_at || null,
+            status: connected ? r?.sync_status || 'completed' : null,
+        };
+    };
+    const sources = [source('github', 'GitHub'), source('resume', 'Resume / CV'), source('linkedin', 'LinkedIn')];
 
-    // Check project count for "Add Project" notification
-    const { count: projectCount } = await supabase.from('projects').select('*', { count: 'exact', head: true }).eq('portfolio_id', portfolio.id);
+    const bio: string = about?.[0]?.content || '';
+    const seoLen = (portfolio?.seo_description || '').length;
+    const checks = [
+        { label: 'At least one data source', completed: sources.some(s => s.connected), hint: 'Connect GitHub or upload a resume', href: '/connect' },
+        { label: 'Portfolio generated', completed: !!portfolio?.last_synced_at, hint: 'Run Generate once', href: '/generate' },
+        { label: 'About section (60+ words)', completed: bio.split(/\s+/).filter(Boolean).length >= 60, hint: 'Write or regenerate your About text', href: '/customize' },
+        { label: `${counts.visibleProjects} visible project${counts.visibleProjects === 1 ? '' : 's'} (3+)`, completed: counts.visibleProjects >= 3, hint: 'Add or show more projects', href: '/projects' },
+        { label: 'Experience listed', completed: counts.experiences > 0, hint: 'Add a role or internship', href: '/experience' },
+        { label: `${counts.skills} skills (5+)`, completed: counts.skills >= 5, hint: 'Add more skills', href: '/skills' },
+        { label: 'SEO description 120–160 chars', completed: seoLen >= 120 && seoLen <= 170, hint: 'Regenerate to rewrite it', href: '/generate' },
+        { label: 'Published', completed: !!portfolio?.is_published, hint: 'Publish it from Preview', href: '/preview' },
+    ];
+    const score = Math.round((checks.filter(c => c.completed).length / checks.length) * 100);
 
-    // 4. Notifications (Derived)
-    const notifications: any[] = [];
-
-    if (!portfolio.is_published) {
-        notifications.push({
-            id: 'publish-nudge',
-            title: 'Publish your portfolio',
-            description: 'Your portfolio is currently hidden. Publish it to share with the world!',
-            unread: true,
-            time: 'Now'
-        });
-    }
-
-    if ((projectCount || 0) === 0) {
-        notifications.push({
-            id: 'add-project',
-            title: 'Add your first project',
-            description: 'Showcase your work by adding a project.',
-            unread: true,
-            time: 'Now'
-        });
-    }
-
-    // Welcome message
-    notifications.push({
-        id: 'welcome',
-        title: 'Welcome to Folio.ai',
-        description: 'We are glad to have you here. Start by setting up your profile.',
-        unread: false,
-        time: '1d ago'
-    });
-
-    return notifications;
+    const scheme = (portfolio?.color_scheme || {}) as Record<string, any>;
+    return {
+        userName: user?.full_name || user?.email || 'there',
+        portfolio: {
+            exists: !!portfolio,
+            subdomain: portfolio?.subdomain || null,
+            layout: LAYOUTS.find(l => l.id === portfolio?.template_id)?.name || 'Modern',
+            theme: typeof scheme.primary === 'string' && !scheme.primary.startsWith('#') ? scheme.primary : 'indigo',
+            isPublished: !!portfolio?.is_published,
+            publishedAt: portfolio?.published_at || null,
+            lastGeneratedAt: portfolio?.last_synced_at || null,
+            updatedAt: portfolio?.updated_at || null,
+            seoDescriptionLength: seoLen,
+        },
+        counts,
+        skillCategories,
+        topTech,
+        sources,
+        health: { score, checks },
+        activity: activity.slice(0, 8),
+    };
 }

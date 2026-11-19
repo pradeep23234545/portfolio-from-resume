@@ -6,6 +6,7 @@ import { Button } from '@/components/ui/button';
 import Link from 'next/link';
 import { cn } from '@/lib/utils';
 import { getPublishStatus, setPublished, type PublishStatus } from '@/actions/publish';
+import { refreshNotifications } from '@/components/dashboard/NotificationBell';
 
 export default function PreviewPage() {
   const [device, setDevice] = useState<'mobile' | 'tablet' | 'desktop'>('desktop');
@@ -33,6 +34,7 @@ export default function PreviewPage() {
     setPublishError(null);
     try {
       const result = await setPublished(!status.isPublished);
+      refreshNotifications();
       if ('error' in result) {
         setPublishError(result.error);
       } else {

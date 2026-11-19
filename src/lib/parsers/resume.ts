@@ -2,6 +2,8 @@
 const PDFParser = require("pdf2json");
 
 interface ResumeData {
+    /** The person's full name as written at the top of the document */
+    name?: string;
     experiences: Array<{
         company: string;
         role: string;
@@ -91,6 +93,7 @@ async function extractResumeWithAI(text: string): Promise<ResumeData> {
     Return the result as a strictly valid JSON object matching this TypeScript interface:
 
     interface ResumeData {
+        name?: string; // the person's full name, exactly as written at the top of the document
         experiences: Array<{
             company: string;
             role: string;

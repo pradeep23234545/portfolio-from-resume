@@ -7,14 +7,14 @@ import { Button } from '@/components/ui/button';
 import { Badge } from '@/components/ui/badge';
 import { Tabs, TabsContent, TabsList, TabsTrigger } from '@/components/ui/tabs';
 import Image from 'next/image';
-import { ModernTemplate } from '@/components/templates/ModernTemplate';
-import { MinimalTemplate } from '@/components/templates/MinimalTemplate';
-import { CreativeTemplate } from '@/components/templates/CreativeTemplate';
+import { PortfolioLayout, LayoutPicker } from '@/components/templates/registry';
+import { FramedPreview } from '@/components/templates/FramedPreview';
 import { usePortfolioStore } from '@/lib/store/usePortfolioStore';
 import ContentEditor from '@/components/dashboard/ContentEditor';
 import Link from 'next/link';
 import { getMyPortfolio, saveMyPortfolio } from '@/actions/portfolio-editor';
 import { onlyVisibleClient } from '@/lib/portfolio/visible';
+import { refreshNotifications } from '@/components/dashboard/NotificationBell';
 
 export default function CustomizePage() {
     const {
@@ -52,64 +52,15 @@ export default function CustomizePage() {
         }).catch(() => setLoadState('empty'));
     }, [setData, setTemplate, setTheme, setFont]);
 
-    const templates = [
-        {
-            id: 'modern',
-            name: 'Modern',
-            preview: (
-                <div className="w-full h-full bg-slate-50 relative p-2 flex flex-col gap-1 overflow-hidden">
-                    <div className="h-4 bg-white rounded-sm shadow-sm"></div>
-                    <div className="flex gap-1">
-                        <div className="flex-1 h-8 bg-white rounded-sm shadow-sm"></div>
-                        <div className="w-4 h-8 bg-indigo-500 rounded-full opacity-20"></div>
-                    </div>
-                    <div className="grid grid-cols-2 gap-1 mt-1">
-                        <div className="h-6 bg-white rounded-sm shadow-sm"></div>
-                        <div className="h-6 bg-white rounded-sm shadow-sm"></div>
-                    </div>
-                </div>
-            )
-        },
-        {
-            id: 'minimal',
-            name: 'Minimal',
-            preview: (
-                <div className="w-full h-full bg-white relative p-3 flex flex-col gap-2 overflow-hidden border border-slate-100">
-                    <div className="h-2 w-1/2 bg-slate-900 rounded-full"></div>
-                    <div className="h-1 w-3/4 bg-slate-200 rounded-full"></div>
-                    <div className="h-px w-full bg-slate-100 my-1"></div>
-                    <div className="flex flex-col gap-1">
-                        <div className="h-1 w-full bg-slate-100 rounded-full"></div>
-                        <div className="h-1 w-full bg-slate-100 rounded-full"></div>
-                    </div>
-                </div>
-            )
-        },
-        {
-            id: 'creative',
-            name: 'Creative',
-            preview: (
-                <div className="w-full h-full bg-slate-950 relative flex overflow-hidden">
-                    <div className="w-1/3 h-full bg-slate-900 p-1 flex flex-col gap-1 border-r border-slate-800">
-                        <div className="w-6 h-1 bg-indigo-500 rounded-full mb-1"></div>
-                        <div className="w-full h-2 bg-slate-800 rounded-sm"></div>
-                        <div className="w-3/4 h-2 bg-slate-800 rounded-sm"></div>
-                    </div>
-                    <div className="w-2/3 h-full p-2 flex flex-col gap-1">
-                        <div className="w-full h-8 bg-slate-900 rounded-md border border-slate-800"></div>
-                        <div className="w-full h-8 bg-slate-900 rounded-md border border-slate-800"></div>
-                    </div>
-                </div>
-            )
-        }
-    ];
-
     const colors = [
         { id: 'indigo', name: 'Indigo', class: 'bg-indigo-500' },
         { id: 'emerald', name: 'Emerald', class: 'bg-emerald-500' },
         { id: 'rose', name: 'Rose', class: 'bg-rose-500' },
         { id: 'amber', name: 'Amber', class: 'bg-amber-500' },
         { id: 'slate', name: 'Slate', class: 'bg-slate-800' },
+        { id: 'cyan', name: 'Cyan', class: 'bg-cyan-500' },
+        { id: 'orange', name: 'Orange', class: 'bg-orange-500' },
+        { id: 'violet', name: 'Violet', class: 'bg-violet-500' },
     ];
 
     const fonts = [
@@ -125,6 +76,7 @@ export default function CustomizePage() {
             const result = await saveMyPortfolio({ data, template, theme, font });
             if ('success' in result) {
                 setSaveMessage('Saved!');
+                refreshNotifications();
                 setTimeout(() => setSaveMessage(''), 3000);
                 // Reload so newly added items get their database ids
                 const fresh = await getMyPortfolio();
@@ -139,15 +91,8 @@ export default function CustomizePage() {
         }
     };
 
-    const renderTemplate = () => {
-        // Preview exactly what visitors will see (hidden items removed)
-        const props = { data: onlyVisibleClient(data), theme, font };
-        switch (template) {
-            case 'minimal': return <MinimalTemplate {...props} />;
-            case 'creative': return <CreativeTemplate {...props} />;
-            default: return <ModernTemplate {...props} />;
-        }
-    }
+    // Preview exactly what visitors will see (hidden items removed)
+    const renderTemplate = () => <PortfolioLayout template={template} data={onlyVisibleClient(data)} theme={theme} font={font} />;
 
     return (
         <div className="h-[calc(100vh-8rem)] flex flex-col lg:flex-row gap-6 animate-fade-in relative">
@@ -174,31 +119,7 @@ export default function CustomizePage() {
                                 <h3 className="text-sm font-medium text-slate-900 mb-3 flex items-center gap-2">
                                     <LayoutTemplate className="h-4 w-4" /> Select Template
                                 </h3>
-                                <div className="grid grid-cols-1 gap-4">
-                                    {templates.map(t => (
-                                        <div
-                                            key={t.id}
-                                            onClick={() => setTemplate(t.id)}
-                                            className={`relative rounded-xl overflow-hidden border-2 cursor-pointer transition-all ${template === t.id
-                                                ? 'border-indigo-500 ring-2 ring-indigo-500/20'
-                                                : 'border-slate-200 hover:border-indigo-200'
-                                                }`}
-                                        >
-                                            <div className="aspect-video bg-slate-100 relative group">
-                                                {t.preview}
-                                                {template === t.id && (
-                                                    <div className="absolute top-2 right-2 bg-indigo-500 text-white p-1 rounded-full shadow-sm z-10">
-                                                        <Check className="h-4 w-4" />
-                                                    </div>
-                                                )}
-                                            </div>
-                                            <div className="p-3 bg-white flex justify-between items-center">
-                                                <span className="font-medium text-slate-900">{t.name}</span>
-                                                {template === t.id && <Badge variant="secondary" className="text-[10px] h-5">Active</Badge>}
-                                            </div>
-                                        </div>
-                                    ))}
-                                </div>
+                                <LayoutPicker value={template} onChange={setTemplate} columns="grid-cols-2" />
                             </TabsContent>
 
                             <TabsContent value="content" className="p-6 pt-2">
@@ -339,7 +260,7 @@ export default function CustomizePage() {
                 {/* Preview Viewport */}
                 <div className="flex-1 overflow-y-auto custom-scrollbar flex items-start justify-center p-8 bg-dot-pattern relative">
                     <div
-                        className="transition-transform duration-300 ease-in-out origin-top mb-10"
+                        className={`transition-transform duration-300 ease-in-out origin-top mb-10 ${deviceView === 'desktop' ? 'w-full max-w-[1200px]' : ''}`}
                         style={{
                             transform: `scale(${deviceView === 'tablet' ? 0.65 : deviceView === 'mobile' ? 0.85 : 1})`,
                             marginTop: deviceView !== 'desktop' ? '20px' : '60px'
@@ -351,9 +272,14 @@ export default function CustomizePage() {
                                     'w-[375px] h-[812px] rounded-3xl border-8 border-slate-800'
                                 }`}
                         >
-                            {/* Render Selected Template */}
+                            {/* Render the selected layout in a real frame so phone/tablet sizes use their responsive styles */}
+                            {loadState === 'ready' ? (
+                                <FramedPreview className={`w-full ${deviceView === 'desktop' ? 'h-[calc(100vh-14rem)]' : 'h-full'}`}>
+                                    {renderTemplate()}
+                                </FramedPreview>
+                            ) : (
                             <div className="w-full h-full overflow-y-auto custom-scrollbar">
-                                {loadState === 'ready' ? renderTemplate() : (
+                                {(
                                     <div className="flex h-full min-h-[400px] flex-col items-center justify-center gap-3 p-8 text-center text-slate-500">
                                         {loadState === 'loading' ? (
                                             <><Loader2 className="h-6 w-6 animate-spin" /> Loading your portfolio…</>
@@ -367,6 +293,7 @@ export default function CustomizePage() {
                                     </div>
                                 )}
                             </div>
+                            )}
                         </div>
                     </div>
                 </div>

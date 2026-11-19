@@ -2,6 +2,7 @@ import { NextRequest, NextResponse } from 'next/server';
 import { serverErrorMessage } from '@/lib/utils';
 import { comparePassword, signJWT } from '@/lib/auth';
 import { createServiceClient } from '@/lib/supabase/service';
+import { recordSignIn, describeDevice } from '@/lib/notifications';
 import { z } from 'zod';
 
 const loginSchema = z.object({
@@ -53,6 +54,7 @@ export async function POST(req: NextRequest) {
 
         // Generate Token
         const token = await signJWT({ sub: foundUser.id, email: foundUser.email });
+        await recordSignIn(supabase, foundUser.id, describeDevice(req.headers.get('user-agent')));
 
         // Set Cookie
         const response = NextResponse.json(

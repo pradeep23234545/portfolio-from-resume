@@ -5,6 +5,7 @@ import { fetchGithubProfile, saveGithubProfile } from '@/lib/github/profile';
 import { mergeDuplicateProjects, projectKey } from '@/lib/portfolio/dedupe';
 import { verifyJWT } from '@/lib/auth';
 import { cookies } from 'next/headers';
+import { notify } from '@/lib/notifications';
 
 async function getUserId() {
     const cookieStore = await cookies();
@@ -14,7 +15,7 @@ async function getUserId() {
     return payload?.sub as string | undefined;
 }
 
-export async function syncGithubRepositories() {
+export async function syncGithubRepositories(options?: { notify?: boolean }) {
     const userId = await getUserId();
     if (!userId) return { error: 'Not authenticated' };
 
@@ -166,6 +167,12 @@ export async function syncGithubRepositories() {
         // Combine any remaining copies of the same project into one card
         await mergeDuplicateProjects(db, portfolio.id);
 
+        if (options?.notify) {
+            await notify(supabase, userId, {
+                kind: 'source', title: 'GitHub synced',
+                body: `Fetched ${count} repositories from @${user.github_username}.`, href: '/connect',
+            });
+        }
         return { success: true, count };
 
     } catch (error: any) {
@@ -192,14 +199,35 @@ export async function linkGithubUsername(input: string) {
     if ('error' in result) return { error: result.error };
     const profile = result.profile;
 
-    // Saves username + profile (name, photo, bio, location, website…) without overwriting user edits
     const supabase = createServiceClient() as any;
+    const { data: current } = await supabase.from('users').select('github_username').eq('id', userId).maybeSingle();
+    const previous: string | null = current?.github_username || null;
+
+    // Saves username + profile (name, photo, bio, location, website…) without overwriting user edits
     const { error } = await saveGithubProfile(supabase, userId, profile);
     if (error) {
         if (error.code === '23505') return { error: 'This GitHub account is already linked to another user.' };
         return { error: error.message };
     }
 
+    // Switching accounts: drop the previous account's repos (resume/LinkedIn projects
+    // they were attached to stay, just without the old repo link)
+    if (previous && previous.toLowerCase() !== String(profile.login).toLowerCase()) {
+        const { data: portfolio } = await supabase.from('portfolios').select('id').eq('user_id', userId).maybeSingle();
+        if (portfolio) {
+            await supabase.from('projects').delete().eq('portfolio_id', portfolio.id).eq('source', 'github');
+            await supabase.from('projects').update({ source_id: null, repo_url: null })
+                .eq('portfolio_id', portfolio.id).not('source_id', 'is', null);
+        }
+    }
+
     const sync = await syncGithubRepositories();
+    const switched = previous && previous.toLowerCase() !== String(profile.login).toLowerCase();
+    await notify(supabase, userId, {
+        kind: 'source',
+        title: switched ? 'GitHub account switched' : 'GitHub connected',
+        body: switched ? `Now using @${profile.login} instead of @${previous}.` : `Linked @${profile.login} and fetched ${sync.count ?? 0} repositories.`,
+        href: '/connect',
+    });
     return { success: true, username: profile.login as string, count: sync.count ?? 0, syncError: sync.error };
 }

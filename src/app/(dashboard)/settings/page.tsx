@@ -1,249 +1,311 @@
 'use client';
 
-import { useState, useEffect } from 'react';
-import { User, Globe, Shield, CreditCard, Save, Upload, Github, Linkedin, Twitter, Mail } from 'lucide-react';
+import { useEffect, useRef, useState } from 'react';
+import Link from 'next/link';
+import {
+    User, Upload, Save, ShieldCheck, KeyRound, LogOut, Trash2, Github, Loader2, CheckCircle2, AlertCircle, Monitor, CalendarDays, Mail,
+} from 'lucide-react';
 import { Card, CardContent, CardDescription, CardHeader, CardTitle, CardFooter } from '@/components/ui/card';
 import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
-import { Tabs, TabsContent, TabsList, TabsTrigger } from '@/components/ui/tabs';
-import { Badge } from '@/components/ui/badge';
-import Link from 'next/link';
+import { Textarea } from '@/components/ui/textarea';
+import { getProfile, updateProfile, changePassword, deleteAccount, type ProfileDetails, type AccountInfo } from '@/actions/settings';
+import { PROFILE_UPDATED_EVENT } from '@/components/dashboard/Header';
+import { refreshNotifications } from '@/components/dashboard/NotificationBell';
 
-export default function SettingsPage() {
-    const [mounted, setMounted] = useState(false);
+type Status = { kind: 'success' | 'error'; text: string } | null;
+
+function StatusLine({ status }: { status: Status }) {
+    if (!status) return null;
+    const ok = status.kind === 'success';
+    return (
+        <p role="status" className={`flex items-center gap-1.5 text-sm ${ok ? 'text-emerald-600' : 'text-red-600'}`}>
+            {ok ? <CheckCircle2 className="h-4 w-4" /> : <AlertCircle className="h-4 w-4" />} {status.text}
+        </p>
+    );
+}
+
+function Field({ label, hint, children }: { label: string; hint?: string; children: React.ReactNode }) {
+    return (
+        <label className="block space-y-1.5">
+            <span className="text-sm font-medium text-slate-900 dark:text-slate-100">{label}</span>
+            {children}
+            {hint && <span className="block text-xs text-slate-500">{hint}</span>}
+        </label>
+    );
+}
+
+const formatDate = (iso: string | null | undefined, withTime = false) =>
+    iso ? new Date(iso).toLocaleString(undefined, withTime
+        ? { dateStyle: 'medium', timeStyle: 'short' }
+        : { dateStyle: 'long' }) : '—';
+
+const EMPTY: ProfileDetails = { fullName: '', avatarUrl: '', headline: '', bio: '', phone: '', location: '', website: '', linkedin: '' };
+
+export default function ProfilePage() {
     const [loading, setLoading] = useState(true);
-    const [user, setUser] = useState<any>(null);
-    const [portfolio, setPortfolio] = useState<any>(null);
+    const [profile, setProfile] = useState<ProfileDetails>(EMPTY);
+    const [account, setAccount] = useState<AccountInfo | null>(null);
     const [saving, setSaving] = useState(false);
+    const [profileStatus, setProfileStatus] = useState<Status>(null);
+    const [uploading, setUploading] = useState(false);
+    const fileInput = useRef<HTMLInputElement>(null);
+
+    const [pw, setPw] = useState({ current: '', next: '', confirm: '' });
+    const [pwStatus, setPwStatus] = useState<Status>(null);
+    const [pwSaving, setPwSaving] = useState(false);
+
+    const [confirmEmail, setConfirmEmail] = useState('');
+    const [deleteStatus, setDeleteStatus] = useState<Status>(null);
+    const [deleting, setDeleting] = useState(false);
 
     useEffect(() => {
-        setMounted(true);
-        loadSettings();
+        getProfile().then(res => {
+            if (res) { setProfile(res.profile); setAccount(res.account); }
+        }).finally(() => setLoading(false));
     }, []);
 
-    const loadSettings = async () => {
+    // /settings#account from the header menu
+    useEffect(() => {
+        if (!loading && window.location.hash) document.querySelector(window.location.hash)?.scrollIntoView({ behavior: 'smooth' });
+    }, [loading]);
+
+    const set = (patch: Partial<ProfileDetails>) => setProfile(p => ({ ...p, ...patch }));
+
+    const uploadPhoto = async (e: React.ChangeEvent<HTMLInputElement>) => {
+        const file = e.target.files?.[0];
+        e.target.value = '';
+        if (!file) return;
+        setUploading(true);
+        setProfileStatus(null);
         try {
-            const { getSettings } = await import('@/actions/settings');
-            const data = await getSettings();
-            if (data) {
-                setUser(data.user);
-                setPortfolio(data.portfolio);
-            }
-        } catch (error) {
-            console.error(error);
+            const fd = new FormData();
+            fd.append('file', file);
+            const res = await fetch('/api/upload/avatar', { method: 'POST', body: fd });
+            const json = await res.json();
+            if (!res.ok) throw new Error(json.error || 'Upload failed');
+            set({ avatarUrl: json.url });
+            setProfileStatus({ kind: 'success', text: 'Photo uploaded. Click Save profile to keep it.' });
+        } catch (err) {
+            setProfileStatus({ kind: 'error', text: err instanceof Error ? err.message : 'Upload failed' });
         } finally {
-            setLoading(false);
+            setUploading(false);
         }
     };
 
-    const handleSavePortfolio = async () => {
+    const saveProfile = async () => {
         setSaving(true);
-        try {
-            const { updatePortfolioSettings } = await import('@/actions/settings');
-            const result = await updatePortfolioSettings(portfolio);
-            if (result.success) {
-                alert('Portfolio settings updated successfully!');
-            } else {
-                alert('Failed to update portfolio: ' + result.error);
-            }
-        } catch (error) {
-            alert('An error occurred');
-        } finally {
-            setSaving(false);
-        }
+        setProfileStatus(null);
+        const res = await updateProfile(profile);
+        setSaving(false);
+        if ('error' in res) return setProfileStatus({ kind: 'error', text: res.error });
+        setProfileStatus({ kind: 'success', text: 'Profile saved.' });
+        window.dispatchEvent(new Event(PROFILE_UPDATED_EVENT));
+        refreshNotifications();
     };
+
+    const savePassword = async () => {
+        setPwStatus(null);
+        if (pw.next !== pw.confirm) return setPwStatus({ kind: 'error', text: 'The new passwords do not match.' });
+        setPwSaving(true);
+        const res = await changePassword(pw.current, pw.next);
+        setPwSaving(false);
+        if ('error' in res) return setPwStatus({ kind: 'error', text: res.error });
+        setPw({ current: '', next: '', confirm: '' });
+        setPwStatus({ kind: 'success', text: 'Password changed.' });
+        refreshNotifications();
+    };
+
+    const removeAccount = async () => {
+        setDeleting(true);
+        setDeleteStatus(null);
+        const res = await deleteAccount(confirmEmail);
+        if ('error' in res) {
+            setDeleting(false);
+            return setDeleteStatus({ kind: 'error', text: res.error });
+        }
+        window.location.href = '/signup';
+    };
+
+    const signOut = async () => {
+        await fetch('/api/auth/logout', { method: 'POST' }).catch(() => {});
+        window.location.href = '/login';
+    };
+
+    if (loading) {
+        return (
+            <div className="max-w-3xl mx-auto flex items-center gap-2 py-20 justify-center text-slate-500">
+                <Loader2 className="h-5 w-5 animate-spin" /> Loading your profile…
+            </div>
+        );
+    }
+
+    const initials = (profile.fullName || account?.email || '?').split(/[\s@]+/).filter(Boolean).slice(0, 2).map(w => w[0]).join('').toUpperCase();
 
     return (
-        <div className="max-w-4xl mx-auto space-y-8 animate-fade-in-up">
-            {/* ... header ... */}
-            <div>
-                <h1 className="text-3xl font-bold tracking-tight text-slate-900 dark:text-white">Settings</h1>
-                <p className="text-slate-500 dark:text-slate-400 mt-2">
-                    Manage your profile, portfolio preferences, and account settings.
-                </p>
+        <div className="max-w-3xl mx-auto space-y-8 animate-fade-in-up">
+            {/* Identity header */}
+            <div className="flex flex-col sm:flex-row sm:items-center gap-5">
+                <div className="relative h-20 w-20 shrink-0">
+                    {profile.avatarUrl ? (
+                        // eslint-disable-next-line @next/next/no-img-element -- avatar hosts vary
+                        <img src={profile.avatarUrl} alt="" className="h-20 w-20 rounded-full object-cover border-4 border-white shadow" />
+                    ) : (
+                        <div className="flex h-20 w-20 items-center justify-center rounded-full bg-gradient-to-br from-indigo-500 to-purple-600 text-2xl font-bold text-white shadow">{initials}</div>
+                    )}
+                </div>
+                <div>
+                    <h1 className="text-3xl font-bold tracking-tight text-slate-900 dark:text-white">{profile.fullName || 'Your profile'}</h1>
+                    <p className="text-slate-500 dark:text-slate-400 mt-1 flex flex-wrap items-center gap-x-4 gap-y-1 text-sm">
+                        <span className="flex items-center gap-1.5"><Mail className="h-4 w-4" />{account?.email}</span>
+                        <span className="flex items-center gap-1.5"><CalendarDays className="h-4 w-4" />Member since {formatDate(account?.createdAt)}</span>
+                    </p>
+                </div>
             </div>
 
-            <Tabs defaultValue="profile" className="w-full">
-                <TabsList className="grid w-full grid-cols-4 lg:w-[400px]">
-                    <TabsTrigger value="profile">Profile</TabsTrigger>
-                    <TabsTrigger value="portfolio">Portfolio</TabsTrigger>
-                    <TabsTrigger value="account">Account</TabsTrigger>
-                    <TabsTrigger value="billing">Billing</TabsTrigger>
-                </TabsList>
+            {/* Personal details */}
+            <Card>
+                <CardHeader>
+                    <CardTitle className="flex items-center gap-2"><User className="h-5 w-5 text-indigo-600" /> Personal details</CardTitle>
+                    <CardDescription>
+                        Details of your account. Your portfolio&apos;s content is edited separately in{' '}
+                        <Link href="/customize" className="text-indigo-600 hover:underline">Customize</Link>.
+                    </CardDescription>
+                </CardHeader>
+                <CardContent className="space-y-5">
+                    <div className="flex items-center gap-3">
+                        <input ref={fileInput} type="file" accept="image/*" className="hidden" onChange={uploadPhoto} />
+                        <Button variant="outline" size="sm" onClick={() => fileInput.current?.click()} loading={uploading} leftIcon={<Upload className="h-4 w-4" />}>
+                            {profile.avatarUrl ? 'Change photo' : 'Upload photo'}
+                        </Button>
+                        {profile.avatarUrl && (
+                            <Button variant="ghost" size="sm" onClick={() => set({ avatarUrl: '' })}>Remove photo</Button>
+                        )}
+                        <span className="text-xs text-slate-500">JPG or PNG, up to 2 MB</span>
+                    </div>
+                    <div className="grid gap-5 sm:grid-cols-2">
+                        <Field label="Full name">
+                            <Input value={profile.fullName} onChange={e => set({ fullName: e.target.value })} autoComplete="name" />
+                        </Field>
+                        <Field label="Headline" hint="e.g. Computer Science student">
+                            <Input value={profile.headline} onChange={e => set({ headline: e.target.value })} />
+                        </Field>
+                        <Field label="Phone">
+                            <Input value={profile.phone} onChange={e => set({ phone: e.target.value })} type="tel" autoComplete="tel" />
+                        </Field>
+                        <Field label="Location" hint="City, Country">
+                            <Input value={profile.location} onChange={e => set({ location: e.target.value })} autoComplete="address-level2" />
+                        </Field>
+                        <Field label="Website">
+                            <Input value={profile.website} onChange={e => set({ website: e.target.value })} placeholder="https://" type="url" />
+                        </Field>
+                        <Field label="LinkedIn">
+                            <Input value={profile.linkedin} onChange={e => set({ linkedin: e.target.value })} placeholder="linkedin.com/in/…" />
+                        </Field>
+                    </div>
+                    <Field label="About you" hint="A few lines about yourself (private to your account).">
+                        <Textarea value={profile.bio} onChange={e => set({ bio: e.target.value })} rows={4} />
+                    </Field>
+                </CardContent>
+                <CardFooter className="bg-slate-50/50 border-t border-slate-100 p-4 flex flex-wrap items-center justify-between gap-3">
+                    <StatusLine status={profileStatus} />
+                    <Button variant="primary" className="ml-auto" onClick={saveProfile} loading={saving} leftIcon={<Save className="h-4 w-4" />}>
+                        Save profile
+                    </Button>
+                </CardFooter>
+            </Card>
 
-                {/* Profile Settings */}
-                <TabsContent value="profile" className="space-y-6 mt-6">
-                    <Card>
-                        <CardHeader>
-                            <CardTitle>Profile</CardTitle>
-                            <CardDescription>
-                                Your name, photo, headline, About text and contact links are edited together with
-                                the rest of your portfolio, with a live preview.
-                            </CardDescription>
-                        </CardHeader>
-                        <CardFooter className="bg-slate-50/50 border-t border-slate-100 p-4 flex justify-end">
-                            <Link href="/customize">
-                                <Button variant="primary">Edit profile & portfolio</Button>
-                            </Link>
-                        </CardFooter>
-                    </Card>
-                </TabsContent>
+            {/* Account */}
+            <Card id="account" className="scroll-mt-24">
+                <CardHeader>
+                    <CardTitle className="flex items-center gap-2"><ShieldCheck className="h-5 w-5 text-indigo-600" /> Account</CardTitle>
+                    <CardDescription>Sign-in details and recent activity on your account.</CardDescription>
+                </CardHeader>
+                <CardContent>
+                    <dl className="grid gap-4 sm:grid-cols-2 text-sm">
+                        <div>
+                            <dt className="text-slate-500">Email (used to sign in)</dt>
+                            <dd className="font-medium text-slate-900 dark:text-white break-all">{account?.email}</dd>
+                        </div>
+                        <div>
+                            <dt className="text-slate-500">Account ID</dt>
+                            <dd className="font-mono text-xs text-slate-700 dark:text-slate-300 break-all">{account?.id}</dd>
+                        </div>
+                        <div>
+                            <dt className="text-slate-500">Last sign-in</dt>
+                            <dd className="flex items-center gap-1.5 font-medium text-slate-900 dark:text-white">
+                                <Monitor className="h-4 w-4 text-slate-400" />
+                                {account?.lastSignIn ? `${formatDate(account.lastSignIn.at, true)} · ${account.lastSignIn.device}` : 'This session'}
+                            </dd>
+                        </div>
+                        <div>
+                            <dt className="text-slate-500">Previous sign-in</dt>
+                            <dd className="font-medium text-slate-900 dark:text-white">
+                                {account?.previousSignIn ? `${formatDate(account.previousSignIn.at, true)} · ${account.previousSignIn.device}` : '—'}
+                            </dd>
+                        </div>
+                        <div>
+                            <dt className="text-slate-500">GitHub</dt>
+                            <dd className="flex items-center gap-1.5 font-medium text-slate-900 dark:text-white">
+                                <Github className="h-4 w-4" />
+                                {account?.githubUsername ? `@${account.githubUsername}` : 'Not connected'}
+                                <Link href="/connect" className="ml-1 text-xs font-normal text-indigo-600 hover:underline">Manage</Link>
+                            </dd>
+                        </div>
+                    </dl>
+                </CardContent>
+                <CardFooter className="bg-slate-50/50 border-t border-slate-100 p-4 flex justify-end">
+                    <Button variant="outline" onClick={signOut} leftIcon={<LogOut className="h-4 w-4" />}>Sign out</Button>
+                </CardFooter>
+            </Card>
 
-                {/* Portfolio Settings */}
-                <TabsContent value="portfolio" className="space-y-6 mt-6">
-                    <Card>
-                        <CardHeader>
-                            <CardTitle>Domain & SEO</CardTitle>
-                            <CardDescription>Configure how your portfolio appears on the web.</CardDescription>
-                        </CardHeader>
-                        <CardContent className="space-y-6">
-                            <div className="space-y-2">
-                                <label className="text-sm font-medium text-slate-900">Subdomain</label>
-                                <div className="flex items-center">
-                                    <span className="bg-slate-100 border border-slate-200 text-slate-500 px-3 py-2 rounded-l-md text-sm border-r-0">
-                                        folio.ai/
-                                    </span>
-                                    <Input
-                                        className="rounded-l-none"
-                                        value={portfolio?.subdomain || ''}
-                                        onChange={(e) => setPortfolio({ ...portfolio, subdomain: e.target.value })}
-                                    />
-                                </div>
-                                <p className="text-xs text-slate-500">
-                                    Your portfolio is live at <a href={`https://folio.ai/${portfolio?.subdomain}`} className="text-indigo-600 hover:underline">folio.ai/{portfolio?.subdomain}</a>
-                                </p>
-                            </div>
+            {/* Password */}
+            <Card>
+                <CardHeader>
+                    <CardTitle className="flex items-center gap-2"><KeyRound className="h-5 w-5 text-indigo-600" /> Change password</CardTitle>
+                    <CardDescription>Use at least 8 characters.</CardDescription>
+                </CardHeader>
+                <CardContent className="grid gap-5 sm:grid-cols-3">
+                    <Field label="Current password">
+                        <Input type="password" value={pw.current} onChange={e => setPw({ ...pw, current: e.target.value })} autoComplete="current-password" />
+                    </Field>
+                    <Field label="New password">
+                        <Input type="password" value={pw.next} onChange={e => setPw({ ...pw, next: e.target.value })} autoComplete="new-password" />
+                    </Field>
+                    <Field label="Confirm new password">
+                        <Input type="password" value={pw.confirm} onChange={e => setPw({ ...pw, confirm: e.target.value })} autoComplete="new-password" />
+                    </Field>
+                </CardContent>
+                <CardFooter className="bg-slate-50/50 border-t border-slate-100 p-4 flex flex-wrap items-center justify-between gap-3">
+                    <StatusLine status={pwStatus} />
+                    <Button variant="outline" className="ml-auto" onClick={savePassword} loading={pwSaving}
+                        disabled={!pw.current || !pw.next || !pw.confirm}>
+                        Update password
+                    </Button>
+                </CardFooter>
+            </Card>
 
-                            <div className="pt-4 border-t border-slate-100">
-                                <div className="flex items-center justify-between mb-4">
-                                    <h4 className="text-sm font-semibold text-slate-900">Custom Domain</h4>
-                                    <Badge variant="secondary" className="bg-amber-100 text-amber-700 hover:bg-amber-100">PRO Feature</Badge>
-                                </div>
-                                <div className="flex gap-2">
-                                    <Input
-                                        placeholder="www.yourdomain.com"
-                                        value={portfolio?.customDomain || ''}
-                                        onChange={(e) => setPortfolio({ ...portfolio, customDomain: e.target.value })}
-                                    />
-                                    <Button variant="secondary">Verify</Button>
-                                </div>
-                            </div>
-
-                            <div className="space-y-4 pt-4 border-t border-slate-100">
-                                <h4 className="text-sm font-semibold text-slate-900">SEO Settings</h4>
-                                <div className="space-y-2">
-                                    <label className="text-sm font-medium text-slate-900">Meta Title</label>
-                                    <Input
-                                        value={portfolio?.seoTitle || ''}
-                                        onChange={(e) => setPortfolio({ ...portfolio, seoTitle: e.target.value })}
-                                    />
-                                </div>
-                                <div className="space-y-2">
-                                    <label className="text-sm font-medium text-slate-900">Meta Description</label>
-                                    <Input
-                                        value={portfolio?.seoDescription || ''}
-                                        onChange={(e) => setPortfolio({ ...portfolio, seoDescription: e.target.value })}
-                                    />
-                                </div>
-                            </div>
-                        </CardContent>
-                        <CardFooter className="bg-slate-50/50 border-t border-slate-100 p-4 flex justify-end">
-                            <Button variant="primary" onClick={handleSavePortfolio} disabled={saving}>
-                                {saving ? 'Saving...' : 'Save Settings'}
-                            </Button>
-                        </CardFooter>
-                    </Card>
-                </TabsContent>
-
-                {/* Account Settings */}
-                <TabsContent value="account" className="space-y-6 mt-6">
-                    <Card>
-                        <CardHeader>
-                            <CardTitle>Account Security</CardTitle>
-                            <CardDescription>Manage your account credentials and security.</CardDescription>
-                        </CardHeader>
-                        <CardContent className="space-y-6">
-                            <div className="space-y-2">
-                                <label className="text-sm font-medium text-slate-900">Email Address</label>
-                                <Input value={user?.email || ''} disabled />
-                            </div>
-
-                            <div className="space-y-4 pt-4 border-t border-slate-100">
-                                <h4 className="text-sm font-semibold text-slate-900">Change Password</h4>
-                                <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
-                                    <div className="space-y-2">
-                                        <label className="text-sm font-medium text-slate-900">Current Password</label>
-                                        <Input type="password" />
-                                    </div>
-                                    <div className="space-y-2">
-                                        <label className="text-sm font-medium text-slate-900">New Password</label>
-                                        <Input type="password" />
-                                    </div>
-                                </div>
-                                <div className="flex justify-end">
-                                    <Button variant="outline">Update Password</Button>
-                                </div>
-                            </div>
-                        </CardContent>
-                    </Card>
-
-                    <Card className="border-red-200">
-                        <CardHeader>
-                            <CardTitle className="text-red-600">Danger Zone</CardTitle>
-                            <CardDescription>Irreversible account actions.</CardDescription>
-                        </CardHeader>
-                        <CardContent>
-                            <div className="flex items-center justify-between">
-                                <div>
-                                    <h4 className="font-medium text-slate-900">Delete Account</h4>
-                                    <p className="text-sm text-slate-500">Permanently remove your account and all data.</p>
-                                </div>
-                                <Button variant="destructive">Delete Account</Button>
-                            </div>
-                        </CardContent>
-                    </Card>
-                </TabsContent>
-
-                {/* Billing Settings */}
-                <TabsContent value="billing" className="space-y-6 mt-6">
-                    <Card className="bg-gradient-to-br from-slate-900 to-slate-800 text-white border-0 shadow-lg">
-                        <CardHeader>
-                            <div className="flex justify-between items-start">
-                                <div>
-                                    <CardTitle className="text-white">Free Plan</CardTitle>
-                                    <CardDescription className="text-slate-300">Basic portfolio features</CardDescription>
-                                </div>
-                                <Badge className="bg-white/10 text-white border-0">Current</Badge>
-                            </div>
-                        </CardHeader>
-                        <CardContent>
-                            <div className="text-3xl font-bold mb-6">$0<span className="text-base font-normal text-slate-400">/mo</span></div>
-                            <ul className="space-y-2 text-sm text-slate-300">
-                                <li className="flex items-center gap-2"><Globe className="h-4 w-4" /> 1 Portfolio</li>
-                                <li className="flex items-center gap-2"><Github className="h-4 w-4" /> Basic GitHub Integration</li>
-                                <li className="flex items-center gap-2"><Shield className="h-4 w-4" /> Standard Support</li>
-                            </ul>
-                        </CardContent>
-                        <CardFooter>
-                            <Button variant="primary" className="w-full bg-white text-slate-900 hover:bg-slate-100 hover:scale-105 transition-all">
-                                Upgrade to Pro
-                            </Button>
-                        </CardFooter>
-                    </Card>
-
-                    <Card>
-                        <CardHeader>
-                            <CardTitle>Billing History</CardTitle>
-                        </CardHeader>
-                        <CardContent>
-                            <div className="text-center py-6 text-slate-500">
-                                <CreditCard className="h-8 w-8 mx-auto mb-2 opacity-20" />
-                                <p>No billing history available.</p>
-                            </div>
-                        </CardContent>
-                    </Card>
-                </TabsContent>
-            </Tabs>
+            {/* Danger zone */}
+            <Card className="border-red-200">
+                <CardHeader>
+                    <CardTitle className="flex items-center gap-2 text-red-600"><Trash2 className="h-5 w-5" /> Delete account</CardTitle>
+                    <CardDescription>
+                        Permanently deletes your account, portfolio, uploads and notifications. This cannot be undone.
+                    </CardDescription>
+                </CardHeader>
+                <CardContent className="space-y-3">
+                    <Field label={`Type ${account?.email} to confirm`}>
+                        <Input value={confirmEmail} onChange={e => setConfirmEmail(e.target.value)} autoComplete="off" />
+                    </Field>
+                    <StatusLine status={deleteStatus} />
+                </CardContent>
+                <CardFooter className="bg-red-50/40 border-t border-red-100 p-4 flex justify-end">
+                    <Button variant="destructive" onClick={removeAccount} loading={deleting}
+                        disabled={confirmEmail.trim().toLowerCase() !== (account?.email || '').toLowerCase()}>
+                        Delete my account
+                    </Button>
+                </CardFooter>
+            </Card>
         </div>
     );
 }

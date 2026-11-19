@@ -2,365 +2,273 @@
 
 import { useEffect, useState } from 'react';
 import Link from 'next/link';
-import { supabase } from '@/lib/supabase/client';
 import {
-    BarChart3,
-    TrendingUp,
-    Users,
-    Eye,
-    Sparkles,
-    ArrowRight,
-    Github,
-    FileText,
-    CheckCircle2,
-    AlertCircle,
-    Plus
+    Sparkles, Eye, Github, FileText, Linkedin, CheckCircle2, AlertCircle, FolderGit2, Briefcase, Cpu, Database,
+    Activity, ArrowRight, Palette, GitBranch, Circle, Loader2,
 } from 'lucide-react';
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/components/ui/card';
 import { Button } from '@/components/ui/button';
-import { Badge } from '@/components/ui/badge';
+import { getDashboardOverview, type DashboardOverview } from '@/actions/dashboard';
+
+function ago(iso: string | null) {
+    if (!iso) return 'never';
+    const s = Math.max(0, (Date.now() - new Date(iso).getTime()) / 1000);
+    if (s < 60) return 'just now';
+    if (s < 3600) return `${Math.floor(s / 60)}m ago`;
+    if (s < 86400) return `${Math.floor(s / 3600)}h ago`;
+    return `${Math.floor(s / 86400)}d ago`;
+}
+
+const stamp = (iso: string) =>
+    new Date(iso).toLocaleString(undefined, { month: 'short', day: '2-digit', hour: '2-digit', minute: '2-digit', hour12: false });
+
+const SOURCE_ICON = { github: Github, resume: FileText, linkedin: Linkedin };
 
 export default function DashboardPage() {
+    const [data, setData] = useState<DashboardOverview | null>(null);
     const [loading, setLoading] = useState(true);
-    const [stats, setStats] = useState({
-        totalViews: 0,
-        uniqueVisitors: 0,
-        projectClicks: 0,
-        contactClicks: 0
-    });
-    const [user, setUser] = useState<any>(null);
-    const [dashboardData, setDashboardData] = useState<any>(null);
 
     useEffect(() => {
-        fetchStats();
+        getDashboardOverview()
+            .then(d => { if (!d) window.location.href = '/login'; else setData(d); })
+            .catch(err => console.error('Failed to load overview', err))
+            .finally(() => setLoading(false));
     }, []);
 
-    const fetchStats = async () => {
-        try {
-            // Fetch user from our custom auth API
-            const res = await fetch('/api/auth/me');
-            const data = await res.json();
-            const userData = data.user;
+    if (loading || !data) return <DashboardSkeleton />;
 
-            if (!userData) {
-                // Not authenticated, redirect to login
-                window.location.href = '/login';
-                return;
-            }
-
-            // Update user state
-            setUser({ ...userData, user_metadata: { full_name: userData.full_name } });
-
-            // Fetch Overview Data (Health, Activity, Notifications)
-            try {
-                const { getDashboardOverview } = await import('@/actions/dashboard');
-                const overview = await getDashboardOverview();
-                setDashboardData(overview);
-            } catch (err) {
-                console.error('Failed to load dashboard overview', err);
-            }
-
-            // Fetch Portfolio
-            const { data: rawPortfolio } = await supabase
-                .from('portfolios')
-                .select('id')
-                .eq('user_id', (userData as any).id)
-                .single();
-
-            const portfolio = rawPortfolio as any;
-
-            if (!portfolio) {
-                setStats({
-                    totalViews: 0,
-                    uniqueVisitors: 0,
-                    projectClicks: 0,
-                    contactClicks: 0
-                });
-                setLoading(false);
-                return;
-            }
-
-            // Fetch Analytics
-            const { data: analytics } = await supabase
-                .from('portfolio_analytics')
-                .select('event_type, visitor_id')
-                .eq('portfolio_id', portfolio.id);
-
-            // Calculate stats
-            if (analytics) {
-                const totalViews = analytics.filter((a: any) => a.event_type === 'view').length;
-                const uniqueVisitors = new Set(analytics.map((a: any) => a.visitor_id)).size;
-                const projectClicks = analytics.filter((a: any) => a.event_type === 'project_click').length;
-                const contactClicks = analytics.filter((a: any) => a.event_type === 'contact_click').length;
-
-                setStats({
-                    totalViews,
-                    uniqueVisitors,
-                    projectClicks,
-                    contactClicks
-                });
-            } else {
-                setStats({
-                    totalViews: 0,
-                    uniqueVisitors: 0,
-                    projectClicks: 0,
-                    contactClicks: 0
-                });
-            }
-
-            setLoading(false);
-        } catch (error) {
-            console.error('Error fetching stats:', error);
-            setLoading(false);
-        }
-    };
-
-    if (loading) {
-        return <DashboardSkeleton />;
-    }
+    const { portfolio, counts, sources, health } = data;
+    const connectedSources = sources.filter(s => s.connected).length;
+    const maxTech = Math.max(1, ...data.topTech.map(t => t.count));
+    const totalSkills = data.skillCategories.reduce((n, c) => n + c.count, 0);
+    const catColor: Record<string, string> = { Frontend: 'bg-indigo-500', Backend: 'bg-emerald-500', Tools: 'bg-amber-500' };
 
     return (
-        <div className="space-y-8 animate-fade-in-up">
-            {/* Wellness / Welcome Section */}
-            <div className="flex flex-col md:flex-row md:items-center justify-between gap-4">
+        <div className="space-y-6 animate-fade-in-up">
+            {/* Header */}
+            <div className="flex flex-col md:flex-row md:items-end justify-between gap-4">
                 <div>
-                    <h1 className="text-3xl font-bold tracking-tight text-slate-900 dark:text-white">
-                        Welcome back, {user?.user_metadata?.full_name || 'Developer'} 👋
-                    </h1>
-                    <p className="text-slate-500 dark:text-slate-400 mt-1">
-                        Here's what's happening with your portfolio today.
-                    </p>
+                    <h1 className="text-3xl font-bold tracking-tight text-slate-900 dark:text-white">Welcome back, {data.userName} 👋</h1>
+                    <p className="text-slate-500 dark:text-slate-400 mt-1">Build status, content and data pipeline for your portfolio.</p>
                 </div>
                 <div className="flex gap-2">
-                    <Link href="/generate">
-                        <Button variant="primary" leftIcon={<Sparkles className="h-4 w-4" />}>
-                            Update Portfolio
-                        </Button>
-                    </Link>
-                    <Link href="/preview">
-                        <Button variant="outline" leftIcon={<Eye className="h-4 w-4" />}>
-                            View Live
-                        </Button>
-                    </Link>
+                    <Link href="/generate"><Button variant="primary" leftIcon={<Sparkles className="h-4 w-4" />}>Regenerate</Button></Link>
+                    <Link href="/preview"><Button variant="outline" leftIcon={<Eye className="h-4 w-4" />}>Preview</Button></Link>
                 </div>
             </div>
 
-            {/* Stats Grid */}
-            <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-6">
-                <StatsCard
-                    title="Total Views"
-                    value={stats.totalViews}
-                    icon={<Eye className="w-5 h-5" />}
-                    trend="+12.5%"
-                    trendUp={true}
-                    color="indigo"
-                />
-                <StatsCard
-                    title="Unique Visitors"
-                    value={stats.uniqueVisitors}
-                    icon={<Users className="w-5 h-5" />}
-                    trend="+8.2%"
-                    trendUp={true}
-                    color="purple"
-                />
-                <StatsCard
-                    title="Project Clicks"
-                    value={stats.projectClicks}
-                    icon={<Github className="w-5 h-5" />}
-                    trend="+5.4%"
-                    trendUp={true}
-                    color="emerald"
-                />
-                <StatsCard
-                    title="Contact Requests"
-                    value={stats.contactClicks}
-                    icon={<TrendingUp className="w-5 h-5" />}
-                    trend="-2.1%"
-                    trendUp={false}
-                    color="amber"
-                />
+            {/* Build status strip */}
+            <div className="rounded-xl border border-slate-800 bg-slate-950 px-5 py-4 font-mono text-xs text-slate-300 shadow-sm">
+                <div className="flex flex-wrap items-center gap-x-6 gap-y-2">
+                    <span className="flex items-center gap-2">
+                        <Circle className={`h-2.5 w-2.5 fill-current ${portfolio.isPublished ? 'text-emerald-400' : portfolio.exists ? 'text-amber-400' : 'text-slate-500'}`} />
+                        <span className="font-semibold text-white">{portfolio.isPublished ? 'LIVE' : portfolio.exists ? 'DRAFT' : 'NOT BUILT'}</span>
+                    </span>
+                    <span><span className="text-slate-500">route</span> {portfolio.subdomain ? `/portfolio/${portfolio.subdomain}` : '—'}</span>
+                    <span><span className="text-slate-500">layout</span> {portfolio.layout.toLowerCase()}</span>
+                    <span><span className="text-slate-500">theme</span> {portfolio.theme}</span>
+                    <span><span className="text-slate-500">last build</span> {ago(portfolio.lastGeneratedAt)}</span>
+                    <span><span className="text-slate-500">last edit</span> {ago(portfolio.updatedAt)}</span>
+                    <span><span className="text-slate-500">sources</span> {connectedSources}/3</span>
+                </div>
             </div>
 
-            <div className="grid grid-cols-1 lg:grid-cols-3 gap-8">
-                {/* Main Content Column */}
+            {/* Metrics */}
+            <div className="grid grid-cols-2 lg:grid-cols-4 gap-4">
+                <Metric icon={<FolderGit2 className="h-5 w-5" />} color="text-indigo-600 bg-indigo-100" label="Projects"
+                    value={counts.visibleProjects} detail={`${counts.projects} total · ${counts.withRepo} with repo`} />
+                <Metric icon={<Briefcase className="h-5 w-5" />} color="text-purple-600 bg-purple-100" label="Experience"
+                    value={counts.experiences} detail={`${counts.education} education entr${counts.education === 1 ? 'y' : 'ies'}`} />
+                <Metric icon={<Cpu className="h-5 w-5" />} color="text-emerald-600 bg-emerald-100" label="Skills"
+                    value={counts.skills} detail={data.skillCategories.map(c => `${c.count} ${c.label.toLowerCase()}`).join(' · ')} />
+                <Metric icon={<Database className="h-5 w-5" />} color="text-amber-600 bg-amber-100" label="Data sources"
+                    value={`${connectedSources}/3`} detail={sources.filter(s => s.connected).map(s => s.label).join(', ') || 'none connected'} />
+            </div>
+
+            <div className="grid grid-cols-1 lg:grid-cols-3 gap-6">
                 <div className="lg:col-span-2 space-y-6">
-                    {/* Portfolio Health */}
+                    {/* Health */}
                     <Card>
-                        <CardHeader>
-                            <CardTitle className="flex items-center gap-2">
-                                <CheckCircle2 className="h-5 w-5 text-emerald-500" />
-                                Portfolio Health
-                            </CardTitle>
-                            <CardDescription>Your portfolio is looking great! Just a few items to polish.</CardDescription>
+                        <CardHeader className="pb-3">
+                            <div className="flex items-center justify-between gap-4">
+                                <div>
+                                    <CardTitle className="flex items-center gap-2"><CheckCircle2 className="h-5 w-5 text-emerald-500" /> Portfolio Health</CardTitle>
+                                    <CardDescription>{health.checks.filter(c => c.completed).length} of {health.checks.length} checks passing</CardDescription>
+                                </div>
+                                <span className="font-mono text-2xl font-bold text-indigo-600">{health.score}%</span>
+                            </div>
                         </CardHeader>
-                        <CardContent>
-                            <div className="space-y-4">
-                                <div className="space-y-2">
-                                    <div className="flex items-center justify-between text-sm">
-                                        <span className="font-medium">Completion Score</span>
-                                        <span className="font-bold text-indigo-600">{dashboardData?.health?.score || 0}%</span>
-                                    </div>
-                                    <div className="h-2 w-full rounded-full bg-slate-100 dark:bg-slate-800">
-                                        <div
-                                            className="h-2 rounded-full bg-gradient-primary animate-pulse-subtle"
-                                            style={{ width: `${dashboardData?.health?.score || 0}%` }}
-                                        />
-                                    </div>
-                                </div>
-                                <div className="grid grid-cols-1 md:grid-cols-2 gap-4 mt-4">
-                                    {dashboardData?.health?.checks.map((check: any, i: number) => (
-                                        <div key={i} className={`flex items-center gap-3 p-3 rounded-lg text-sm ${check.completed ? 'bg-emerald-50 text-emerald-700' : 'bg-amber-50 text-amber-700'}`}>
-                                            {check.completed ? <CheckCircle2 className="h-4 w-4 shrink-0" /> : <AlertCircle className="h-4 w-4 shrink-0" />}
-                                            <span>{check.label}</span>
-                                        </div>
-                                    ))}
-                                    {!dashboardData && (
-                                        <div className="text-sm text-slate-400">Loading health data...</div>
-                                    )}
-                                </div>
+                        <CardContent className="space-y-4">
+                            <div className="h-2 w-full rounded-full bg-slate-100 dark:bg-slate-800">
+                                <div className="h-2 rounded-full bg-gradient-primary" style={{ width: `${health.score}%` }} />
+                            </div>
+                            <div className="grid grid-cols-1 md:grid-cols-2 gap-2">
+                                {health.checks.map(check => (
+                                    <Link key={check.label} href={check.href}
+                                        className={`group flex items-start gap-2.5 rounded-lg p-2.5 text-sm transition-colors ${check.completed ? 'bg-emerald-50 text-emerald-700 hover:bg-emerald-100' : 'bg-amber-50 text-amber-800 hover:bg-amber-100'}`}>
+                                        {check.completed ? <CheckCircle2 className="mt-0.5 h-4 w-4 shrink-0" /> : <AlertCircle className="mt-0.5 h-4 w-4 shrink-0" />}
+                                        <span>
+                                            <span className="block font-medium">{check.label}</span>
+                                            {!check.completed && <span className="block text-xs opacity-80">{check.hint} →</span>}
+                                        </span>
+                                    </Link>
+                                ))}
                             </div>
                         </CardContent>
                     </Card>
 
-                    {/* Quick Actions */}
-                    <div className="grid grid-cols-1 md:grid-cols-3 gap-6">
-                        <QuickActionCard
-                            title="Sync GitHub"
-                            description="Pull latest repositories"
-                            icon={<Github className="h-6 w-6 text-indigo-600" />}
-                            href="/connect"
-                        />
-                        <QuickActionCard
-                            title="Edit Projects"
-                            description="Manage project details"
-                            icon={<FileText className="h-6 w-6 text-purple-600" />}
-                            href="/projects"
-                        />
-                        <QuickActionCard
-                            title="Analytics"
-                            description="View visitor insights"
-                            icon={<BarChart3 className="h-6 w-6 text-emerald-600" />}
-                            href="/analytics"
-                        />
+                    {/* Tech stack */}
+                    <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
+                        <Card>
+                            <CardHeader className="pb-3">
+                                <CardTitle className="text-base flex items-center gap-2"><GitBranch className="h-4 w-4 text-indigo-600" /> Tech stack in projects</CardTitle>
+                                <CardDescription>Technologies by number of projects using them</CardDescription>
+                            </CardHeader>
+                            <CardContent>
+                                {data.topTech.length ? (
+                                    <ul className="space-y-2.5">
+                                        {data.topTech.map(t => (
+                                            <li key={t.name} className="grid grid-cols-[96px_1fr_24px] items-center gap-3 text-sm">
+                                                <span className="truncate text-slate-700 dark:text-slate-300" title={t.name}>{t.name}</span>
+                                                <span className="h-2 rounded-full bg-slate-100 dark:bg-slate-800">
+                                                    <span className="block h-2 rounded-full bg-indigo-500" style={{ width: `${(t.count / maxTech) * 100}%` }} />
+                                                </span>
+                                                <span className="text-right font-mono text-xs text-slate-500">{t.count}</span>
+                                            </li>
+                                        ))}
+                                    </ul>
+                                ) : <p className="text-sm text-slate-500">No project technologies yet.</p>}
+                            </CardContent>
+                        </Card>
+                        <Card>
+                            <CardHeader className="pb-3">
+                                <CardTitle className="text-base flex items-center gap-2"><Cpu className="h-4 w-4 text-emerald-600" /> Skill distribution</CardTitle>
+                                <CardDescription>{totalSkills} skills across categories</CardDescription>
+                            </CardHeader>
+                            <CardContent className="space-y-4">
+                                <div className="flex h-3 w-full overflow-hidden rounded-full bg-slate-100 dark:bg-slate-800">
+                                    {data.skillCategories.filter(c => c.count).map(c => (
+                                        <span key={c.label} className={catColor[c.label]} style={{ width: `${(c.count / Math.max(1, totalSkills)) * 100}%` }} title={`${c.label}: ${c.count}`} />
+                                    ))}
+                                </div>
+                                <ul className="space-y-2 text-sm">
+                                    {data.skillCategories.map(c => (
+                                        <li key={c.label} className="flex items-center justify-between">
+                                            <span className="flex items-center gap-2 text-slate-700 dark:text-slate-300"><span className={`h-2.5 w-2.5 rounded-sm ${catColor[c.label]}`} />{c.label}</span>
+                                            <span className="font-mono text-xs text-slate-500">{c.count} · {totalSkills ? Math.round((c.count / totalSkills) * 100) : 0}%</span>
+                                        </li>
+                                    ))}
+                                </ul>
+                            </CardContent>
+                        </Card>
                     </div>
+
+                    {/* Data pipeline */}
+                    <Card>
+                        <CardHeader className="pb-3">
+                            <CardTitle className="text-base flex items-center gap-2"><Database className="h-4 w-4 text-amber-600" /> Data sources</CardTitle>
+                            <CardDescription>What each generation can read from</CardDescription>
+                        </CardHeader>
+                        <CardContent className="overflow-x-auto">
+                            <table className="w-full min-w-[480px] text-sm">
+                                <thead>
+                                    <tr className="border-b border-slate-100 text-left text-xs uppercase tracking-wider text-slate-500">
+                                        <th className="pb-2 font-medium">Source</th>
+                                        <th className="pb-2 font-medium">Identifier</th>
+                                        <th className="pb-2 font-medium">Last sync</th>
+                                        <th className="pb-2 font-medium text-right">Status</th>
+                                    </tr>
+                                </thead>
+                                <tbody>
+                                    {sources.map(s => {
+                                        const Icon = SOURCE_ICON[s.type];
+                                        return (
+                                            <tr key={s.type} className="border-b border-slate-50 last:border-0">
+                                                <td className="py-2.5"><span className="flex items-center gap-2 font-medium text-slate-900 dark:text-white"><Icon className="h-4 w-4" />{s.label}</span></td>
+                                                <td className="py-2.5 font-mono text-xs text-slate-600 dark:text-slate-400 max-w-[180px] truncate">{s.identifier || '—'}</td>
+                                                <td className="py-2.5 font-mono text-xs text-slate-600 dark:text-slate-400">{s.connected ? ago(s.lastSyncedAt) : '—'}</td>
+                                                <td className="py-2.5 text-right">
+                                                    {s.connected ? (
+                                                        <span className={`rounded-full px-2 py-0.5 font-mono text-[11px] ${s.status === 'completed' ? 'bg-emerald-100 text-emerald-700' : 'bg-amber-100 text-amber-700'}`}>{s.status}</span>
+                                                    ) : (
+                                                        <Link href="/connect" className="text-xs font-medium text-indigo-600 hover:underline">connect →</Link>
+                                                    )}
+                                                </td>
+                                            </tr>
+                                        );
+                                    })}
+                                </tbody>
+                            </table>
+                        </CardContent>
+                    </Card>
                 </div>
 
-                {/* Sidebar Column */}
+                {/* Right column */}
                 <div className="space-y-6">
-                    {/* Recent Activity */}
                     <Card>
-                        <CardHeader>
-                            <CardTitle>Recent Activity</CardTitle>
+                        <CardHeader className="pb-3">
+                            <CardTitle className="text-base flex items-center gap-2"><Activity className="h-4 w-4 text-indigo-600" /> Activity log</CardTitle>
+                            <CardDescription>Latest events on your account</CardDescription>
                         </CardHeader>
                         <CardContent>
-                            <div className="space-y-6 relative ml-2">
-                                <div className="absolute left-0 top-2 bottom-2 w-px bg-slate-200 dark:bg-slate-800" />
-                                {dashboardData?.recentActivity?.length > 0 ? (
-                                    dashboardData.recentActivity.map((item: any, i: number) => (
-                                        <div key={i} className="relative pl-6 flex flex-col gap-1">
-                                            <div className="absolute -left-[5px] top-1.5 h-2.5 w-2.5 rounded-full bg-white border-2 border-indigo-500 ring-4 ring-white dark:ring-slate-950" />
-                                            <span className="text-sm font-medium text-slate-900 dark:text-slate-100">{item.text}</span>
-                                            <span className="text-xs text-slate-500">{item.time}</span>
-                                        </div>
-                                    ))
-                                ) : (
-                                    <div className="pl-6 text-sm text-slate-500">No recent activity</div>
-                                )}
-                            </div>
+                            {data.activity.length ? (
+                                <ol className="relative ml-1 space-y-4 border-l border-slate-200 dark:border-slate-800 pl-5">
+                                    {data.activity.map(a => (
+                                        <li key={a.id} className="relative">
+                                            <span className={`absolute -left-[25px] top-1.5 h-2 w-2 rounded-full ring-4 ring-white dark:ring-slate-950 ${a.read ? 'bg-slate-300' : 'bg-indigo-500'}`} />
+                                            <p className="text-sm font-medium text-slate-900 dark:text-slate-100">{a.title}</p>
+                                            <p className="text-xs text-slate-500 line-clamp-2">{a.body}</p>
+                                            <p className="mt-0.5 font-mono text-[11px] text-slate-400">{stamp(a.createdAt)}</p>
+                                        </li>
+                                    ))}
+                                </ol>
+                            ) : <p className="text-sm text-slate-500">No activity yet.</p>}
                         </CardContent>
                     </Card>
 
-                    {/* AI Insight */}
-                    <Card className="bg-gradient-to-br from-indigo-50 to-purple-50 dark:from-indigo-950/20 dark:to-purple-950/20 border-indigo-100 dark:border-indigo-900/50">
-                        <CardHeader className="pb-2">
-                            <CardTitle className="text-base flex items-center gap-2 text-indigo-700 dark:text-indigo-400">
-                                <Sparkles className="h-4 w-4" /> AI Insight
-                            </CardTitle>
-                        </CardHeader>
-                        <CardContent>
-                            <p className="text-sm text-slate-600 dark:text-slate-400 mb-3">
-                                Adding a case study to your "E-commerce" project could increase engagement by ~40%.
-                            </p>
-                            <Button variant="ghost" size="sm" className="text-indigo-600 hover:text-indigo-700 hover:bg-indigo-100 p-0 h-auto font-medium">
-                                Generate Case Study <ArrowRight className="h-3 w-3 ml-1" />
-                            </Button>
-                        </CardContent>
-                    </Card>
+                    <div className="grid grid-cols-1 gap-3">
+                        <QuickAction href="/connect" icon={<Github className="h-5 w-5 text-indigo-600" />} title="Sync sources" text="Re-fetch GitHub or upload new PDFs" />
+                        <QuickAction href="/projects" icon={<FolderGit2 className="h-5 w-5 text-purple-600" />} title="Edit projects" text="Descriptions, tags and visibility" />
+                        <QuickAction href="/customize" icon={<Palette className="h-5 w-5 text-amber-600" />} title="Customize layout" text="10 layouts, colours and fonts" />
+                    </div>
                 </div>
             </div>
         </div>
     );
 }
 
-function StatsCard({ title, value, icon, trend, trendUp, color }: any) {
-    const colors = {
-        indigo: "text-indigo-600 bg-indigo-100",
-        purple: "text-purple-600 bg-purple-100",
-        emerald: "text-emerald-600 bg-emerald-100",
-        amber: "text-amber-600 bg-amber-100",
-    };
-
+function Metric({ icon, color, label, value, detail }: { icon: React.ReactNode; color: string; label: string; value: number | string; detail: string }) {
     return (
         <Card>
-            <CardContent className="p-6">
-                <div className="flex items-center justify-between mb-4">
-                    <div className={`p-2 rounded-lg ${colors[color as keyof typeof colors]}`}>
-                        {icon}
-                    </div>
-                    {trend && (
-                        <Badge variant={trendUp ? "success" : "neutral"} className="font-mono">
-                            {trend}
-                        </Badge>
-                    )}
+            <CardContent className="p-5">
+                <div className="flex items-center gap-3">
+                    <span className={`rounded-lg p-2 ${color}`}>{icon}</span>
+                    <span className="text-sm font-medium text-slate-500">{label}</span>
                 </div>
-                <div>
-                    <p className="text-sm font-medium text-slate-500 dark:text-slate-400">{title}</p>
-                    <h3 className="text-2xl font-bold text-slate-900 dark:text-white mt-1">
-                        {typeof value === 'number' ? value.toLocaleString() : value}
-                    </h3>
-                </div>
+                <p className="mt-3 font-mono text-3xl font-bold text-slate-900 dark:text-white">{value}</p>
+                <p className="mt-1 truncate text-xs text-slate-500" title={detail}>{detail}</p>
             </CardContent>
         </Card>
     );
 }
 
-function QuickActionCard({ title, description, icon, href }: any) {
+function QuickAction({ href, icon, title, text }: { href: string; icon: React.ReactNode; title: string; text: string }) {
     return (
-        <Link href={href} className="group">
-            <Card className="h-full transition-all duration-200 hover:-translate-y-1 hover:shadow-md border-slate-200 hover:border-indigo-200">
-                <CardContent className="p-6 flex flex-col items-center text-center gap-4">
-                    <div className="p-3 rounded-full bg-slate-50 group-hover:bg-indigo-50 transition-colors">
-                        {icon}
-                    </div>
-                    <div>
-                        <h3 className="font-semibold text-slate-900">{title}</h3>
-                        <p className="text-sm text-slate-500 mt-1">{description}</p>
-                    </div>
-                </CardContent>
-            </Card>
+        <Link href={href} className="group flex items-center gap-3 rounded-xl border border-slate-200 bg-white p-4 transition-all hover:border-indigo-200 hover:shadow-sm dark:border-slate-800 dark:bg-slate-950">
+            <span className="rounded-lg bg-slate-50 p-2 group-hover:bg-indigo-50">{icon}</span>
+            <span className="flex-1">
+                <span className="block text-sm font-semibold text-slate-900 dark:text-white">{title}</span>
+                <span className="block text-xs text-slate-500">{text}</span>
+            </span>
+            <ArrowRight className="h-4 w-4 text-slate-400 group-hover:text-indigo-600" />
         </Link>
     );
 }
 
 function DashboardSkeleton() {
     return (
-        <div className="space-y-8">
-            <div className="flex justify-between items-center">
-                <div className="space-y-2">
-                    <div className="h-8 w-64 bg-slate-200 rounded animate-pulse" />
-                    <div className="h-4 w-48 bg-slate-200 rounded animate-pulse" />
-                </div>
-                <div className="h-10 w-32 bg-slate-200 rounded animate-pulse" />
-            </div>
-            <div className="grid grid-cols-1 md:grid-cols-4 gap-6">
-                {[1, 2, 3, 4].map(i => (
-                    <div key={i} className="h-32 bg-slate-200 rounded-xl animate-pulse" />
-                ))}
-            </div>
-            <div className="grid grid-cols-1 lg:grid-cols-3 gap-8">
-                <div className="lg:col-span-2 h-64 bg-slate-200 rounded-xl animate-pulse" />
-                <div className="h-64 bg-slate-200 rounded-xl animate-pulse" />
-            </div>
+        <div className="flex items-center justify-center gap-2 py-24 text-slate-500">
+            <Loader2 className="h-5 w-5 animate-spin" /> Loading overview…
         </div>
     );
 }

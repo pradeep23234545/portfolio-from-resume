@@ -3,6 +3,7 @@
 import { createServiceClient } from '@/lib/supabase/service';
 import { verifyJWT } from '@/lib/auth';
 import { cookies } from 'next/headers';
+import { notify } from '@/lib/notifications';
 import { notFound } from 'next/navigation';
 
 async function getUserId() {
@@ -81,6 +82,7 @@ export async function createProject(data: { title: string; description: string; 
     } as any);
 
     if (error) return { error: error.message };
+    await notify(supabase, userId, { kind: 'content', title: 'Project created', body: `Added "${data.title}" to your portfolio.`, href: '/projects' });
     return { success: true };
 }
 
@@ -134,6 +136,7 @@ export async function createExperience(data: { role: string; company: string; pe
     } as any);
 
     if (error) return { error: error.message };
+    await notify(supabase, userId, { kind: 'content', title: 'Experience added', body: `${data.role} at ${data.company}.`, href: '/experience' });
     return { success: true };
 }
 
@@ -156,7 +159,8 @@ export async function getUserConnections() {
         github: !!user.github_username,
         githubUsername: (user.github_username as string | null) || null,
         resume: sources.has('resume'),
-        linkedin: sources.has('linkedin') || !!user.linkedin_url,
+        // A LinkedIn URL alone (e.g. found in the resume) is not an import to build from
+        linkedin: sources.has('linkedin'),
     };
 }
 

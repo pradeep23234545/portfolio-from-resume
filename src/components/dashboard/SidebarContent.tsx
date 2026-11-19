@@ -7,9 +7,8 @@ import {
     LayoutDashboard,
     Users,
     Calendar,
-    BarChart3,
     FolderOpen,
-    Settings,
+    UserCircle,
     HelpCircle,
     FileText,
     Palette,
@@ -41,11 +40,10 @@ const workspaceItems: SidebarItemType[] = [
 
 const analysisItems: SidebarItemType[] = [
     { name: 'Preview', href: '/preview', icon: Eye },
-    { name: 'Analytics', href: '/analytics', icon: BarChart3 },
 ]
 
 const generalItems: SidebarItemType[] = [
-    { name: 'Settings', href: '/settings', icon: Settings },
+    { name: 'Profile', href: '/settings', icon: UserCircle },
 ]
 
 export function SidebarContent() {
@@ -99,7 +97,7 @@ export function SidebarContent() {
                 {/* Analysis */}
                 <div className="mb-8">
                     <h3 className="text-xs font-semibold text-slate-500 uppercase tracking-wider mb-4 px-2">
-                        Analysis & View
+                        Publish
                     </h3>
                     <div className="space-y-1">
                         {analysisItems.map((item) => (
@@ -115,7 +113,7 @@ export function SidebarContent() {
                 {/* General */}
                 <div>
                     <h3 className="text-xs font-semibold text-slate-500 uppercase tracking-wider mb-4 px-2">
-                        System
+                        Account
                     </h3>
                     <div className="space-y-1">
                         {generalItems.map((item) => (

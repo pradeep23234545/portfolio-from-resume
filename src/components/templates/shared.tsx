@@ -42,25 +42,28 @@ export function initials(name: string) {
     return name.split(/\s+/).filter(Boolean).slice(0, 2).map(w => w[0]?.toUpperCase()).join('') || '?';
 }
 
-/** Round profile photo with an initials fallback. */
+/** Profile photo (round unless `shape` says otherwise) with a large initials fallback. */
 export function ProfilePhoto({
     data,
     className = '',
     fallbackClassName = 'bg-indigo-600 text-white',
+    shape = 'rounded-full',
 }: {
     data: PortfolioData;
     className?: string;
     fallbackClassName?: string;
+    shape?: string;
 }) {
     if (data.avatarUrl) {
         return (
             // eslint-disable-next-line @next/next/no-img-element -- avatars come from arbitrary hosts (GitHub, Supabase storage)
-            <img src={data.avatarUrl} alt={data.name} className={`rounded-full object-cover ${className}`} />
+            <img src={data.avatarUrl} alt={data.name} className={`${shape} object-cover ${className}`} />
         );
     }
     return (
-        <div className={`rounded-full flex items-center justify-center font-bold ${fallbackClassName} ${className}`}>
-            <span className="text-[min(3rem,40%)]">{initials(data.name)}</span>
+        <div className={`${shape} flex items-center justify-center font-bold [container-type:inline-size] ${fallbackClassName} ${className}`}>
+            {/* Scales with the box: about a third of its width */}
+            <span className="text-[34cqw] leading-none tracking-tight">{initials(data.name)}</span>
         </div>
     );
 }

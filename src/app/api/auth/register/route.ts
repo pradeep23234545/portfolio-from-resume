@@ -2,6 +2,7 @@ import { NextRequest, NextResponse } from 'next/server';
 import { serverErrorMessage } from '@/lib/utils';
 import { hashPassword, signJWT } from '@/lib/auth';
 import { createServiceClient } from '@/lib/supabase/service';
+import { notify, recordSignIn, describeDevice } from '@/lib/notifications';
 import { z } from 'zod';
 
 const registerSchema = z.object({
@@ -65,6 +66,13 @@ export async function POST(req: NextRequest) {
 
         // Generate Token
         const token = await signJWT({ sub: userId, email });
+        await recordSignIn(supabase, userId, describeDevice(req.headers.get('user-agent')));
+        await notify(supabase, userId, {
+            kind: 'account',
+            title: 'Welcome! Your account was created',
+            body: 'Start on the Connect page: add GitHub, a resume or a LinkedIn PDF, then generate your portfolio.',
+            href: '/connect',
+        });
 
         // Set Cookie
         const response = NextResponse.json(

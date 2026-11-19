@@ -46,7 +46,7 @@ export const CreativeTemplate = ({ data, theme, font }: TemplateProps) => {
                     <div>
                         <ProfilePhoto data={data} className="w-24 h-24 mb-6 ring-4 ring-slate-800" fallbackClassName={`${themeBg} text-white`} />
                         <div className={`w-20 h-2 rounded-full mb-8 ${themeBg}`} />
-                        <h1 className="text-5xl font-black tracking-tight mb-4 leading-tight">
+                        <h1 className="text-4xl sm:text-5xl font-black tracking-tight mb-4 leading-tight break-words">
                             HELLO, I'M <br />
                             <span className="text-transparent bg-clip-text bg-gradient-to-r from-white to-slate-500">{data.name.toUpperCase()}</span>
                         </h1>

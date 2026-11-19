@@ -3,6 +3,7 @@ import { verifyJWT } from '@/lib/auth';
 import { createServiceClient } from '@/lib/supabase/service';
 import { parseResumePDF } from '@/lib/parsers/resume';
 import { serverErrorMessage } from '@/lib/utils';
+import { notify } from '@/lib/notifications';
 
 const MAX_SIZE = 10 * 1024 * 1024; // 10 MB
 
@@ -65,6 +66,12 @@ export async function handleProfilePdfUpload(
             return NextResponse.json({ error: serverErrorMessage(error, 'Failed to save upload') }, { status: 500 });
         }
 
+        await notify(supabase, userId, {
+            kind: 'source',
+            title: sourceType === 'resume' ? 'Resume uploaded' : 'LinkedIn PDF uploaded',
+            body: `${file.name}${parsed.name ? ` — read ${parsed.name}` : ''}. Generate to build your portfolio from it.`,
+            href: '/connect',
+        });
         return NextResponse.json({ success: true, data: parsed });
     } catch (error) {
         console.error(`Error uploading ${sourceType}:`, error);

@@ -1,6 +1,7 @@
 'use server';
 
 import { cookies } from 'next/headers';
+import { notify } from '@/lib/notifications';
 import { revalidatePath } from 'next/cache';
 import { verifyJWT } from '@/lib/auth';
 import { createServiceClient } from '@/lib/supabase/service';
@@ -63,10 +64,18 @@ export async function saveMyPortfolio(input: {
 
     // ── Profile ────────────────────────────────────────────────────────
     const githubUser = clean(d.socials.github).replace(/^https?:\/\/(www\.)?github\.com\//i, '').split(/[/?#]/)[0];
+
+    // A portfolio generated without GitHub hides the GitHub link; an empty link then
+    // must not unlink the account, and typing one in shows it again
+    const { data: prevAbout } = await supabase.from('portfolio_content').select('metadata')
+        .eq('portfolio_id', pid).eq('section_type', 'about').limit(1);
+    const prevSources = prevAbout?.[0]?.metadata?.sources;
+    const builtWithoutGithub = Array.isArray(prevSources) && !prevSources.includes('github');
+    const sources = Array.isArray(prevSources) && githubUser && builtWithoutGithub ? [...prevSources, 'github'] : prevSources;
+
     await supabase.from('users').update({
-        full_name: clean(d.name) || null,
         avatar_url: clean(d.avatarUrl) || null,
-        github_username: githubUser || null,
+        ...(githubUser || !builtWithoutGithub ? { github_username: githubUser || null } : {}),
         linkedin_url: clean(d.socials.linkedin) || null,
         updated_at: now,
     }).eq('id', userId).then(check('Profile'));
@@ -79,12 +88,16 @@ export async function saveMyPortfolio(input: {
         user_edited: true,
         metadata: {
             hero_tagline: clean(d.title),
+            // The portfolio's name/email belong to the portfolio, not the login account
+            display_name: clean(d.name),
+            contact_email: prevAbout?.[0]?.metadata?.contact_email || '',
             location: clean(d.location),
             phone: clean(d.phone),
             website: clean(d.website),
             twitter: clean(d.socials.twitter),
             show_email: d.showEmail !== false,
             show_phone: d.showPhone === true,
+            ...(sources ? { sources } : {}),
         },
     }).then(check('About'));
 
@@ -200,5 +213,9 @@ export async function saveMyPortfolio(input: {
         console.error('saveMyPortfolio errors:', errors);
         return { error: `Saved with problems: ${errors.slice(0, 2).join('; ')}` };
     }
+    await notify(supabase, userId, {
+        kind: 'content', title: 'Portfolio updated',
+        body: `Saved your edits (${input.template} layout).`, href: '/customize',
+    });
     return { success: true };
 }

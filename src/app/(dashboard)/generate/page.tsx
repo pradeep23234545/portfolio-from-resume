@@ -1,20 +1,46 @@
 'use client';
 
-import { useState } from 'react';
+import { useState, useEffect } from 'react';
 import Link from 'next/link';
 import { Sparkles, Loader2, CheckCircle2, AlertCircle, ArrowRight, Wand2, Search, FileText, Globe, Eye } from 'lucide-react';
 import { Card } from '@/components/ui/card';
 import { Button } from '@/components/ui/button';
 import { generateMyPortfolio } from '@/actions/generate';
+import { getUserConnections } from '@/actions/user-data';
+import { getMyPortfolio } from '@/actions/portfolio-editor';
+import { LayoutPicker } from '@/components/templates/registry';
+import { normalizeLayoutId } from '@/lib/portfolio/layouts';
+import { ALL_SOURCES, SOURCE_LABELS, type DataSource } from '@/lib/portfolio/sources';
+import { refreshNotifications } from '@/components/dashboard/NotificationBell';
 
 export default function GeneratePage() {
     const [generating, setGenerating] = useState(false);
     const [complete, setComplete] = useState(false);
     const [currentStage, setCurrentStage] = useState(0);
     const [error, setError] = useState<string | null>(null);
+    const [connected, setConnected] = useState<DataSource[] | null>(null);
+    const [selected, setSelected] = useState<DataSource[]>([]);
+    const [layout, setLayout] = useState<string>('modern');
+
+    useEffect(() => {
+        // Start from the layout the portfolio already uses
+        getMyPortfolio().then(p => { if (p) setLayout(normalizeLayoutId(p.template)); }).catch(() => {});
+        getUserConnections().then(connections => {
+            const available = connections ? ALL_SOURCES.filter(s => connections[s]) : [];
+            // ?sources=github,resume from the Connect page; otherwise every connected source
+            const requested = new URLSearchParams(window.location.search).get('sources')?.split(',');
+            const initial = requested ? available.filter(s => requested.includes(s)) : available;
+            setConnected(available);
+            setSelected(initial.length ? initial : available);
+        });
+    }, []);
+
+    const toggle = (source: DataSource) =>
+        setSelected(prev => prev.includes(source) ? prev.filter(s => s !== source) : [...prev, source]);
+    const selectedLabel = ALL_SOURCES.filter(s => selected.includes(s)).map(s => SOURCE_LABELS[s]).join(' + ');
 
     const stages = [
-        { name: 'Analyzing Data Sources', icon: Search, detail: 'Scanning GitHub repos and Resume...' },
+        { name: 'Analyzing Data Sources', icon: Search, detail: `Reading ${selectedLabel || 'your data'}...` },
         { name: 'Structuring Content', icon: FileText, detail: 'Creating project descriptions and bio...' },
         { name: 'Optimizing SEO', icon: Globe, detail: 'Injecting keywords and meta tags...' },
         { name: 'Finalizing Design', icon: Wand2, detail: 'Applying theme and layout...' }
@@ -35,7 +61,7 @@ export default function GeneratePage() {
         }, 6000);
 
         try {
-            const result = await generateMyPortfolio();
+            const result = await generateMyPortfolio(selected, layout);
             if (!result.success) {
                 setError(result.error);
                 return;
@@ -47,6 +73,7 @@ export default function GeneratePage() {
                 '.' + (warnings.length ? ` Note: ${warnings[0]}` : '')
             );
             setComplete(true);
+            refreshNotifications();
         } catch (err) {
             console.error('Generation error:', err);
             setError(err instanceof Error ? err.message : 'An error occurred during generation. Please try again.');
@@ -91,11 +118,62 @@ export default function GeneratePage() {
                             </div>
                         </div>
 
+                        <div className="text-left rounded-xl border border-slate-200 dark:border-slate-800 p-4">
+                            <h3 className="font-semibold text-slate-900 dark:text-white">Build from</h3>
+                            {connected === null ? (
+                                <p className="mt-2 text-sm text-slate-400 flex items-center gap-2"><Loader2 className="h-4 w-4 animate-spin" /> Checking your sources…</p>
+                            ) : connected.length === 0 ? (
+                                <p className="mt-2 text-sm text-slate-500">
+                                    No sources connected yet. <Link href="/connect" className="font-medium text-indigo-600 underline">Add GitHub, a resume or a LinkedIn PDF</Link> first.
+                                </p>
+                            ) : (
+                                <>
+                                    <div className="mt-3 flex flex-wrap gap-2">
+                                        {ALL_SOURCES.map(source => {
+                                            const available = connected.includes(source);
+                                            const on = selected.includes(source);
+                                            return (
+                                                <button
+                                                    key={source}
+                                                    type="button"
+                                                    disabled={!available}
+                                                    onClick={() => toggle(source)}
+                                                    aria-pressed={on}
+                                                    className={`inline-flex items-center gap-1.5 rounded-full border px-3 py-1.5 text-sm transition-colors ${
+                                                        !available
+                                                            ? 'border-dashed border-slate-200 text-slate-400 cursor-not-allowed'
+                                                            : on
+                                                                ? 'border-indigo-500 bg-indigo-50 text-indigo-700 dark:bg-indigo-900/30 dark:text-indigo-200'
+                                                                : 'border-slate-300 text-slate-600 hover:border-indigo-300'
+                                                    }`}
+                                                >
+                                                    {on && available && <CheckCircle2 className="h-4 w-4" />}
+                                                    {SOURCE_LABELS[source]}
+                                                    {!available && <span className="text-xs">(not added)</span>}
+                                                </button>
+                                            );
+                                        })}
+                                    </div>
+                                    <p className="mt-3 text-xs text-slate-500">
+                                        Every generation starts fresh: the current portfolio content (including anything added by hand)
+                                        is replaced with what the selected sources contain. Your design and publish settings stay.
+                                    </p>
+                                </>
+                            )}
+                        </div>
+
+                        <div className="text-left rounded-xl border border-slate-200 dark:border-slate-800 p-4">
+                            <h3 className="font-semibold text-slate-900 dark:text-white">Choose a layout</h3>
+                            <p className="mt-1 mb-4 text-xs text-slate-500">You can switch layouts any time later on the Customize page.</p>
+                            <LayoutPicker value={layout} onChange={setLayout} columns="grid-cols-2 sm:grid-cols-3 md:grid-cols-5" />
+                        </div>
+
                         <div className="pt-4">
                             <Button
                                 size="xl"
                                 variant="primary"
                                 className="w-full md:w-auto min-w-[200px] shadow-indigo-500/25 shadow-lg"
+                                disabled={!selected.length}
                                 onClick={startGeneration}
                                 rightIcon={<Wand2 className="h-5 w-5" />}
                             >

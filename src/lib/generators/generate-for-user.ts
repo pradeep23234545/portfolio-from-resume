@@ -2,6 +2,7 @@ import { createServiceClient } from '@/lib/supabase/service';
 import { geminiFlash, assertGeminiConfigured } from '@/lib/ai/gemini';
 import { fetchGithubProfile, saveGithubProfile } from '@/lib/github/profile';
 import { mergeDuplicateProjects } from '@/lib/portfolio/dedupe';
+import { ALL_SOURCES, SOURCE_LABELS, type DataSource } from '@/lib/portfolio/sources';
 
 export type GenerateResult =
     | {
@@ -56,7 +57,10 @@ async function getOrCreatePortfolio(supabase: any, userId: string, user: { email
  *     into Frontend / Backend / Tools
  *  3. saves SEO text (publishing is a separate step the user takes)
  */
-export async function generatePortfolioForUser(userId: string): Promise<GenerateResult> {
+export async function generatePortfolioForUser(
+    userId: string,
+    selected: DataSource[] = [...ALL_SOURCES],
+): Promise<GenerateResult> {
     try {
         assertGeminiConfigured();
         const supabase = createServiceClient() as any;
@@ -84,16 +88,20 @@ export async function generatePortfolioForUser(userId: string): Promise<Generate
         if (!p.length && !ex.length && !sk.length) {
             return {
                 success: false,
-                error: 'There is no data to build from yet. Connect GitHub or upload your resume on the Connect page first.',
+                error: 'The selected sources have no projects, experience or skills to build from. Select another source or add details on the Connect page.',
             };
         }
 
         const warnings: string[] = [];
 
-        // Profile facts from GitHub, resume and LinkedIn
+        // Profile facts from the selected sources only
         const { data: sourceRows } = await supabase.from('data_sources').select('source_type, source_data').eq('user_id', userId);
-        const sources: Record<string, any> = Object.fromEntries((sourceRows || []).map((r: any) => [r.source_type, r.source_data || {}]));
-        if (!sources.github && user.github_username) {
+        const sources: Record<string, any> = Object.fromEntries(
+            (sourceRows || [])
+                .filter((r: any) => selected.includes(r.source_type))
+                .map((r: any) => [r.source_type, r.source_data || {}])
+        );
+        if (!sources.github && user.github_username && selected.includes('github')) {
             // GitHub was linked before profiles were imported: fetch it now
             const result = await fetchGithubProfile(user.github_username);
             if ('profile' in result) {
@@ -115,6 +123,10 @@ export async function generatePortfolioForUser(userId: string): Promise<Generate
             resume_summary: cv.summary || null,
             location: pick(li.location, cv.location, gh.location) || null,
         };
+
+        // Who the portfolio is about comes from the selected sources, not the account
+        const sourceName = pick(cv.name, li.name, gh.name);
+        const sourceEmail = pick(cv.contact?.email, li.contact?.email, gh.email);
 
         // Start the second AI request now so both run at the same time
         const needDescription = p.filter((x: any) => !x.short_description?.trim()).slice(0, 10);
@@ -139,15 +151,17 @@ SKILLS: ${JSON.stringify(sk.map((s: any) => ({ id: s.id, name: s.skill_name })))
 
         // ── 1. About section, tagline, SEO ─────────────────────────────
         const about = await askJson<{
+            name?: string;
             about_me: string;
             hero_tagline: string;
             location?: string;
             meta_description: string;
         }>(`
-You write portfolio websites for developers. Using ONLY the facts below, write content for ${user.full_name || 'this developer'}.
+You write portfolio websites for developers. Using ONLY the facts below, write content for ${sourceName || 'this person'}.
 Do not invent employers, degrees, numbers or achievements that are not in the data.
 
-PROFILE (their own words from GitHub/LinkedIn/resume — reuse their voice and facts): ${JSON.stringify(profileFacts)}
+NAME: ${sourceName || 'not given'}
+PROFILE (their own words from ${selected.map(s => SOURCE_LABELS[s]).join(', ')} — reuse their voice and facts): ${JSON.stringify(profileFacts)}
 EXPERIENCE: ${JSON.stringify(ex)}
 EDUCATION: ${JSON.stringify(ed)}
 PROJECTS: ${JSON.stringify(p.slice(0, 12).map((x: any) => ({ title: x.title, description: x.short_description, tech: x.technologies })))}
@@ -156,10 +170,13 @@ SKILLS: ${sk.map((s: any) => s.skill_name).join(', ')}
 Return ONLY JSON:
 {
   "about_me": "First-person About Me, 90-140 words, warm and specific, no buzzword lists",
-  "hero_tagline": "Short role headline, max 8 words, e.g. 'Full-Stack Developer & CS Student'",
+  "name": "The person's full name if it is clearly stated in the data above (e.g. NAME or a summary), otherwise empty string",
+  "hero_tagline": ""Short role headline, max 8 words, e.g. 'Full-Stack Developer & CS Student'",
   "location": "City, Country if clearly stated in the data, otherwise empty string",
   "meta_description": "SEO description, 140-160 characters"
 }`);
+
+        const displayName = pick(sourceName, about.name, user.full_name);
 
         // Replace the previous AI-written About section (keep it if the user edited it)
         const { data: oldAbout } = await supabase
@@ -177,11 +194,15 @@ Return ONLY JSON:
                 ai_generated_content: about.about_me,
                 metadata: {
                     hero_tagline: about.hero_tagline,
+                    display_name: displayName,
+                    contact_email: sourceEmail,
                     location: pick(about.location, profileFacts.location),
                     // Contact details found in the GitHub profile, resume or LinkedIn PDF
                     phone: pick(cv.contact?.phone, li.contact?.phone),
                     website: pick(gh.blog, cv.contact?.website, li.contact?.website),
                     twitter: pick(gh.twitter_username, cv.contact?.twitter, li.contact?.twitter),
+                    // Which sources this portfolio was built from (hides GitHub links when not chosen)
+                    sources: selected,
                     show_email: true,
                     show_phone: false, // phone numbers stay private until the user opts in
                 },
@@ -219,7 +240,7 @@ Return ONLY JSON:
         // ── 3. SEO ─────────────────────────────────────────────────────
         const now = new Date().toISOString();
         const { error: seoError } = await supabase.from('portfolios').update({
-            seo_title: `${user.full_name || 'Portfolio'} — ${about.hero_tagline}`,
+            seo_title: `${displayName || 'Portfolio'} — ${about.hero_tagline}`,
             seo_description: about.meta_description,
             last_synced_at: now,
             updated_at: now,
