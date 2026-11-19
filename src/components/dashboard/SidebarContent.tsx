@@ -13,6 +13,7 @@ import {
     FileText,
     Palette,
     Eye,
+    Rocket,
     Sparkles
 } from 'lucide-react'
 import { Badge } from '@/components/ui/badge'
@@ -40,6 +41,7 @@ const workspaceItems: SidebarItemType[] = [
 
 const analysisItems: SidebarItemType[] = [
     { name: 'Preview', href: '/preview', icon: Eye },
+    { name: 'Deploy Guide', href: '/deploy', icon: Rocket },
 ]
 
 const generalItems: SidebarItemType[] = [

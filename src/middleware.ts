@@ -4,7 +4,7 @@ import { verifyJWT } from '@/lib/auth';
 // Every page of the app needs an account; public portfolios (/portfolio/...) do not
 const protectedRoutes = [
     '/dashboard', '/onboarding', '/connect', '/generate', '/projects', '/experience', '/skills',
-    '/customize', '/preview', '/settings', '/help',
+    '/customize', '/preview', '/deploy', '/settings', '/help',
 ];
 const authRoutes = ['/login', '/signup'];
 

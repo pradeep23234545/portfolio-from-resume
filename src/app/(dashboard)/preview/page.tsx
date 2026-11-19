@@ -7,6 +7,7 @@ import Link from 'next/link';
 import { cn } from '@/lib/utils';
 import { getPublishStatus, setPublished, type PublishStatus } from '@/actions/publish';
 import { refreshNotifications } from '@/components/dashboard/NotificationBell';
+import { downloadWebsite } from '@/lib/download-website';
 
 export default function PreviewPage() {
   const [device, setDevice] = useState<'mobile' | 'tablet' | 'desktop'>('desktop');
@@ -54,19 +55,7 @@ export default function PreviewPage() {
   const handleDownload = async () => {
     setDownloading(true);
     try {
-      const res = await fetch('/api/export');
-      if (!res.ok) {
-        const body = await res.json().catch(() => ({}));
-        throw new Error(body.error || 'Download failed');
-      }
-      const url = URL.createObjectURL(await res.blob());
-      const a = document.createElement('a');
-      a.href = url;
-      a.download = 'index.html';
-      document.body.appendChild(a);
-      a.click();
-      a.remove();
-      URL.revokeObjectURL(url);
+      await downloadWebsite();
       refreshNotifications();
     } catch (err) {
       alert(err instanceof Error ? err.message : 'Download failed');
