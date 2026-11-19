@@ -6,7 +6,6 @@ import { verifyJWT } from '@/lib/auth';
 import { loadPortfolio, onlyVisible } from '@/lib/portfolio/load';
 import { ModernTemplate } from '@/components/templates/ModernTemplate';
 import { PortfolioLayout } from '@/components/templates/registry';
-import { ViewTracker } from '@/components/templates/ViewTracker';
 
 async function viewerId() {
     const token = (await cookies()).get('auth-token')?.value;
@@ -52,8 +51,6 @@ export default async function PortfolioPage({ params }: { params: Promise<{ subd
                 </div>
             )}
             <PortfolioLayout template={portfolio.template} data={onlyVisible(portfolio.data)} theme={portfolio.theme} font={portfolio.font} />
-            {/* Count visitors only: not the owner, not drafts */}
-            {portfolio.isPublished && !isOwner && <ViewTracker portfolioId={portfolio.id} />}
         </>
     );
 }

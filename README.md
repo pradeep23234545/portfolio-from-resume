@@ -41,7 +41,7 @@ a template, and publish it at your own public URL.
 - **Live editor** — edit your photo, name, headline, About, contact links, projects (show/hide, reorder), experience, education and skills with an instant preview.
 - **Three templates** — Modern, Minimal and Creative, each in five colour themes and three font styles, with profile photo, education and working contact links (email opens Gmail).
 - **Draft & publish** — portfolios stay private drafts until you click **Publish Live**; unpublish any time.
-- **Analytics** — privacy-friendly visit tracking (no IP addresses stored): views, unique visitors, devices, countries and referrers.
+- **Notifications** — sign-ins, uploads, generations, publishing and edits, with an unread badge, mark-as-read and remove.
 - **Secure auth** — email/password (bcrypt + JWT in an HTTP-only cookie) and optional GitHub OAuth.
 
 ## How to use
@@ -151,15 +151,13 @@ Open [http://localhost:3000](http://localhost:3000).
 src/
 ├── actions/              # Server Actions: generate, editor save, publish, GitHub, resume…
 ├── app/
-│   ├── (auth)/           # Login, signup, OAuth callback
-│   ├── (dashboard)/      # Dashboard, editor, templates, analytics, settings
-│   ├── api/              # Route handlers: auth, uploads, generation, analytics, health
-│   ├── portfolio/[subdomain]/  # Public portfolio pages
-│   └── page.tsx          # Landing page
+│   ├── (auth)/           # Login and signup
+│   ├── (dashboard)/      # Overview, Connect, Generate, editor, preview, profile
+│   ├── api/              # Route handlers: auth, uploads, health
+│   └── portfolio/[subdomain]/  # Public portfolio pages
 ├── components/
-│   ├── dashboard/        # Sidebar, header, content editor, stats
-│   ├── landing/          # Landing-page sections
-│   ├── templates/        # Portfolio templates
+│   ├── dashboard/        # Sidebar, header, notifications, content editor
+│   ├── templates/        # Portfolio layouts (10) and the layout picker
 │   └── ui/               # Reusable UI primitives
 ├── lib/
 │   ├── ai/               # Gemini client with retry/fallback
@@ -167,7 +165,7 @@ src/
 │   ├── github/           # GitHub profile import
 │   ├── parsers/          # Resume / LinkedIn PDF parser (Gemini)
 │   ├── portfolio/        # Loads a portfolio for templates and the editor
-│   ├── supabase/         # Browser, server and service-role clients
+│   ├── supabase/         # Server and service-role clients
 │   ├── store/            # Zustand stores
 │   └── auth.ts           # Password hashing and JWT helpers
 └── middleware.ts         # Protects dashboard routes
