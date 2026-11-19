@@ -65,7 +65,9 @@ export async function parseResumePDF(buffer: Buffer): Promise<ResumeData> {
 
                 assertGeminiConfigured();
 
-                if (!text.trim()) {
+                // pdf2json inserts "----Page (n) Break----" markers even when a page has no text
+                const meaningful = text.replace(/-+Page \(\d+\) Break-+/g, '').trim();
+                if (!meaningful) {
                     throw new Error('No text found in this PDF. Scanned/image-only PDFs are not supported — export a text PDF instead.');
                 }
 

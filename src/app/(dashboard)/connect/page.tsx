@@ -102,12 +102,25 @@ export default function ConnectPage() {
         e.target.value = ''; // allow choosing the same file again
         if (!file) return;
 
+        // Read the bytes now: cloud-only files (OneDrive/Google Drive placeholders) can come through as 0 bytes.
+        let bytes: ArrayBuffer;
+        try {
+            bytes = await file.arrayBuffer();
+        } catch {
+            setSourceStatus(type, { kind: 'error', text: 'Could not read that file. Copy it to your computer (not a cloud-only file) and try again.' });
+            return;
+        }
+        if (bytes.byteLength === 0) {
+            setSourceStatus(type, { kind: 'error', text: 'That file is empty (0 bytes). If it is stored in OneDrive/Google Drive, make it available offline or copy it to your computer, then try again.' });
+            return;
+        }
+
         setBusy(type);
         setSourceStatus(type, { kind: 'success', text: 'Reading your PDF with AI — this can take up to a minute…' });
 
         try {
             const formData = new FormData();
-            formData.append('file', file);
+            formData.append('file', new Blob([bytes], { type: 'application/pdf' }), file.name);
             const response = await fetch(`/api/upload/${type}`, { method: 'POST', body: formData });
 
             if (!response.ok) {

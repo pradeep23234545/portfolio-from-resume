@@ -35,6 +35,15 @@ export async function handleProfilePdfUpload(
         }
 
         const buffer = Buffer.from(await file.arrayBuffer());
+        if (buffer.length === 0) {
+            return NextResponse.json(
+                { error: 'The uploaded file is empty (0 bytes). If it lives in OneDrive/Google Drive, make it available offline or copy it to your computer, then try again.' },
+                { status: 400 }
+            );
+        }
+        if (buffer.subarray(0, 1024).indexOf('%PDF-') === -1) {
+            return NextResponse.json({ error: 'This file is not a valid PDF. Please export your resume as a PDF and try again.' }, { status: 400 });
+        }
         const parsed = await parseResumePDF(buffer);
 
         const supabase = createServiceClient();
